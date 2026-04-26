@@ -8,6 +8,7 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
+    "start": "npx -y serve dist -s -p 8080",
     "test": "vitest run",
     "test:watch": "vitest"
   },

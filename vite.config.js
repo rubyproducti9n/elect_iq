@@ -2,7 +2,7 @@ import { defineConfig } from 'vite';
 
 export default defineConfig({
   root: '.',
-  publicDir: 'assets/icons',
+  publicDir: 'public',
   build: {
     outDir: 'dist',
     rollupOptions: {
