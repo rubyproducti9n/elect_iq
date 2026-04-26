@@ -1,96 +1,88 @@
-/* ═══════════════════════════════════════════════
-   ElectIQ — Gemini API Tests
-   ═══════════════════════════════════════════════ */
+import { askGemini } from '../assets/js/gemini.js';
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+describe('gemini.js Module', () => {
+  let fetchStub;
 
-// Mock config
-vi.mock('../assets/js/config.js', () => ({
-  default: {
-    GEMINI_API_KEY: 'test-key-123',
-    GEMINI_MODEL: 'gemini-2.0-flash',
-    GEMINI_ENDPOINT: 'https://generativelanguage.googleapis.com/v1beta/models',
-    RATE_LIMIT_RPM: 30,
-  },
-}));
-
-// Mock sanitize
-vi.mock('../assets/js/sanitize.js', () => ({
-  sanitizeOutput: (text) => text,
-}));
-
-describe('Gemini API', () => {
   beforeEach(() => {
-    vi.restoreAllMocks();
-    global.fetch = vi.fn();
+    fetchStub = vi.fn();
+    window.fetch = fetchStub;
+    sessionStorage.clear();
   });
 
-  it('should send correctly formatted request to Gemini endpoint', async () => {
-    global.fetch.mockResolvedValueOnce({
+  afterEach(() => {
+    window.fetch = undefined;
+  });
+
+  it('builds correct request body with system prompt + history', async () => {
+    fetchStub.mockResolvedValueOnce({
       ok: true,
-      json: () =>
-        Promise.resolve({
-          candidates: [
-            { content: { parts: [{ text: 'Test response' }] } },
-          ],
-        }),
+      json: async () => ({ candidates: [{ content: { parts: [{ text: 'Response' }] } }] })
+    });
+    
+    await askGemini('Hello', [{ role: 'user', content: 'Prev' }]);
+    const reqBody = JSON.parse(fetchStub.calls[0][1].body);
+    expect(reqBody.contents).to.have.length(2);
+    expect(reqBody.system_instruction).to.exist;
+  });
+
+  it('parses SUGGESTIONS: from response correctly', async () => {
+    fetchStub.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ candidates: [{ content: { parts: [{ text: 'Answer\nSUGGESTIONS: [Q1] | [Q2] | [Q3]' }] } }] })
+    });
+    
+    const result = await askGemini('Hello');
+    expect(result.text).to.equal('Answer');
+    expect(result.suggestedQuestions).to.deep.equal(['Q1', 'Q2', 'Q3']);
+  });
+
+  it('returns error object on 429 response', async () => {
+    fetchStub.mockResolvedValue({
+      ok: false,
+      status: 429,
+      text: async () => 'Rate Limited'
+    });
+    
+    const result = await askGemini('Hello');
+    expect(result.error).to.be.true;
+    expect(result.code).to.equal(429);
+  });
+
+  it('retries up to 3 times on 500 errors', async () => {
+    fetchStub.mockResolvedValue({
+      ok: false,
+      status: 500,
+      text: async () => 'Server Error'
+    });
+    
+    await askGemini('Hello');
+    expect(fetchStub.calls.length).to.equal(4); // 1 initial + 3 retries
+  });
+
+  it('rate limiter blocks after 10 requests in 60s', async () => {
+    fetchStub.mockResolvedValue({
+      ok: true,
+      json: async () => ({ candidates: [{ content: { parts: [{ text: 'OK' }] } }] })
     });
 
-    const { askGemini } = await import('../assets/js/gemini.js');
-    const response = await askGemini('How do I vote?');
-
-    expect(response).toBe('Test response');
-    expect(global.fetch).toHaveBeenCalledTimes(1);
-
-    const [url, options] = global.fetch.mock.calls[0];
-    expect(url).toContain('gemini-2.0-flash');
-    expect(url).toContain('test-key-123');
-    expect(options.method).toBe('POST');
-
-    const body = JSON.parse(options.body);
-    expect(body.contents).toBeDefined();
-    expect(body.generationConfig).toBeDefined();
-    expect(body.safetySettings).toBeDefined();
+    for (let i = 0; i < 10; i++) {
+      await askGemini('test');
+    }
+    const result = await askGemini('11th test');
+    expect(result.error).to.be.true;
+    expect(result.message).to.include('sending messages too quickly');
   });
 
-  it('should return fallback message when no candidates', async () => {
-    global.fetch.mockResolvedValueOnce({
+  it('rate limiter resets after 60s window', async () => {
+    const stored = new Array(10).fill(Date.now() - 61000);
+    sessionStorage.setItem('electiq_api_timestamps', JSON.stringify(stored));
+    
+    fetchStub.mockResolvedValueOnce({
       ok: true,
-      json: () => Promise.resolve({ candidates: [] }),
+      json: async () => ({ candidates: [{ content: { parts: [{ text: 'OK' }] } }] })
     });
 
-    const { askGemini } = await import('../assets/js/gemini.js');
-    const response = await askGemini('Test');
-
-    expect(response).toContain('unable to generate');
-  });
-
-  it('should include chat history in request', async () => {
-    global.fetch.mockResolvedValueOnce({
-      ok: true,
-      json: () =>
-        Promise.resolve({
-          candidates: [{ content: { parts: [{ text: 'OK' }] } }],
-        }),
-    });
-
-    const { askGemini } = await import('../assets/js/gemini.js');
-    const history = [
-      { role: 'user', content: 'Hello' },
-      { role: 'assistant', content: 'Hi there!' },
-    ];
-
-    await askGemini('Follow up', history);
-
-    const body = JSON.parse(global.fetch.mock.calls[0][1].body);
-    // System prompt + system ack + 2 history + current message = 5
-    expect(body.contents.length).toBeGreaterThanOrEqual(5);
-  });
-});
-
-describe('RateLimiter', () => {
-  it('should allow requests under the limit', async () => {
-    const { rateLimiter } = await import('../assets/js/gemini.js');
-    expect(rateLimiter.canProceed()).toBe(true);
+    const result = await askGemini('test');
+    expect(result.error).to.be.undefined;
   });
 });

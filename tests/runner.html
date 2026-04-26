@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>ElectIQ Test Suite</title>
+  <link href="https://unpkg.com/mocha@10.2.0/mocha.css" rel="stylesheet" />
+  <style>
+    body { font-family: system-ui, sans-serif; background: #1e1e20; color: #fff; margin: 0; padding: 20px; }
+    #mocha { margin: 20px 0; }
+    #coverage-summary { background: #2a2a2d; padding: 15px; border-radius: 8px; margin-top: 20px; }
+    .pass { color: #34d399; }
+    .fail { color: #f87171; }
+    #mock-dom-container { display: none; }
+  </style>
+</head>
+<body>
+  <h1>ElectIQ Test Suite</h1>
+  
+  <div id="coverage-summary">
+    <h3>Coverage Summary</h3>
+    <p>Running tests...</p>
+  </div>
+
+  <div id="mocha"></div>
+  
+  <!-- Hidden container for UI tests -->
+  <div id="mock-dom-container"></div>
+
+  <!-- Dependencies -->
+  <script src="https://unpkg.com/mocha@10.2.0/mocha.js"></script>
+  <script src="https://unpkg.com/chai@4.3.7/chai.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/axe-core/4.7.0/axe.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.1.6/purify.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/marked/12.0.1/marked.min.js"></script>
+
+  <script>
+    // Setup Mocha to BDD interface (describe, it)
+    mocha.setup('bdd');
+    window.expect = chai.expect;
+
+    // Vitest mock polyfills for browser
+    window.vi = {
+      fn: () => {
+        const mock = function(...args) {
+          mock.calls.push(args);
+          return mock.mockReturnValue;
+        };
+        mock.calls = [];
+        mock.mockReturnValue = undefined;
+        mock.mockReturnValueOnce = (val) => { mock.mockReturnValue = val; return mock; };
+        mock.mockResolvedValue = (val) => { mock.mockReturnValue = Promise.resolve(val); return mock; };
+        return mock;
+      },
+      restoreAllMocks: () => {}
+    };
+  </script>
+
+  <script type="module">
+    // Mock Config before importing modules
+    window.Config = {
+      GEMINI_API_KEY: 'test-key',
+      GEMINI_ENDPOINT: 'https://generativelanguage.googleapis.com/v1beta/models',
+      GEMINI_MODEL: 'gemini-1.5-flash'
+    };
+
+    // Load Tests
+    import '../tests/sanitize.test.js';
+    import '../tests/gemini.test.js';
+    import '../tests/timeline.test.js';
+    import '../tests/chat.test.js';
+    import '../tests/a11y.test.js';
+
+    // Run tests
+    mocha.run((failures) => {
+      const total = document.querySelectorAll('.test').length;
+      const passed = document.querySelectorAll('.test.pass').length;
+      const failed = document.querySelectorAll('.test.fail').length;
+      
+      const summary = document.getElementById('coverage-summary');
+      summary.innerHTML = `
+        <h3>Coverage Summary</h3>
+        <p><strong>Total Tests:</strong> ${total}</p>
+        <p class="pass"><strong>Passed:</strong> ${passed}</p>
+        <p class="${failed > 0 ? 'fail' : ''}"><strong>Failed:</strong> ${failed}</p>
+        <div style="width:100%;background:#444;height:10px;border-radius:5px;overflow:hidden;margin-top:10px;">
+          <div style="width:${total === 0 ? 0 : (passed/total)*100}%;background:#34d399;height:100%;"></div>
+        </div>
+      `;
+    });
+  </script>
+</body>
+</html>

@@ -3,164 +3,88 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ElectIQ — AI Election Guide</title>
 
-  <!-- SEO -->
-  <title>ElectIQ — AI-Powered Election Assistant</title>
-  <meta name="description" content="ElectIQ is an AI-powered interactive assistant that helps you understand the election process, timelines, voter registration, and civic engagement." />
-  <meta name="keywords" content="election, voting, voter registration, civic engagement, AI assistant" />
+  <!-- CDNs -->
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" />
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/marked/12.0.1/marked.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.1.6/purify.min.js"></script>
 
-  <!-- Open Graph -->
-  <meta property="og:title" content="ElectIQ — AI-Powered Election Assistant" />
-  <meta property="og:description" content="Your AI guide to understanding elections, voter registration, and the democratic process." />
-  <meta property="og:type" content="website" />
-  <meta property="og:image" content="/icon-512x512.png" />
-
-  <!-- PWA -->
-  <link rel="manifest" href="/manifest.json" />
-  <meta name="theme-color" content="#1A6FEF" />
-  <link rel="icon" type="image/png" sizes="192x192" href="/icon-192x192.png" />
-  <link rel="apple-touch-icon" href="/icon-192x192.png" />
-
-  <!-- API Keys (injected at build time — NEVER hardcode) -->
-  <meta name="gemini-api-key" content="%VITE_GEMINI_API_KEY%" />
-  <meta name="firebase-api-key" content="%VITE_FIREBASE_API_KEY%" />
-  <meta name="firebase-auth-domain" content="%VITE_FIREBASE_AUTH_DOMAIN%" />
-  <meta name="firebase-project-id" content="%VITE_FIREBASE_PROJECT_ID%" />
-  <meta name="firebase-storage-bucket" content="%VITE_FIREBASE_STORAGE_BUCKET%" />
-  <meta name="firebase-messaging-sender-id" content="%VITE_FIREBASE_MESSAGING_SENDER_ID%" />
-  <meta name="firebase-app-id" content="%VITE_FIREBASE_APP_ID%" />
-  <meta name="firebase-measurement-id" content="%VITE_FIREBASE_MEASUREMENT_ID%" />
-  <meta name="google-tts-api-key" content="%VITE_GOOGLE_TTS_API_KEY%" />
-
-  <!-- Fonts & Icons -->
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700&display=swap" rel="stylesheet" />
-  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet" />
-
-  <!-- Markdown & Sanitization (CDNs) -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/marked/12.0.1/marked.min.js" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.1.6/purify.min.js" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
-
-  <!-- Styles -->
-  <link rel="stylesheet" href="/assets/css/reset.css" />
+  <!-- Styles (Root-relative paths for Vite/Public folder) -->
   <link rel="stylesheet" href="/assets/css/variables.css" />
+  <link rel="stylesheet" href="/assets/css/reset.css" />
   <link rel="stylesheet" href="/assets/css/layout.css" />
   <link rel="stylesheet" href="/assets/css/chat.css" />
   <link rel="stylesheet" href="/assets/css/timeline.css" />
+  <link rel="stylesheet" href="/assets/css/journey.css" />
+  <link rel="stylesheet" href="/assets/css/glossary.css" />
+  <link rel="stylesheet" href="/assets/css/ui.css" />
   <link rel="stylesheet" href="/assets/css/responsive.css" />
-
-  <!-- Inline critical styles for hero -->
-  <style>
-    .hero {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      min-height: calc(100vh - var(--header-height) - 200px);
-      padding: var(--space-8);
-      text-align: center;
-    }
-    .hero__content { max-width: 640px; }
-    .hero__title {
-      font-family: var(--ff-display);
-      font-weight: var(--fw-bold);
-      line-height: var(--lh-tight);
-      margin-bottom: var(--space-6);
-    }
-    .hero__title-line {
-      display: block;
-      font-size: var(--fs-hero);
-      color: var(--clr-text-primary);
-    }
-    .hero__title-highlight {
-      display: block;
-      font-size: var(--fs-hero);
-      background: var(--grad-gold);
-      -webkit-background-clip: text;
-      -webkit-text-fill-color: transparent;
-      background-clip: text;
-    }
-    .hero__subtitle {
-      font-size: var(--fs-md);
-      color: var(--clr-text-secondary);
-      line-height: var(--lh-relaxed);
-      margin-bottom: var(--space-8);
-    }
-    .hero__actions {
-      display: flex;
-      gap: var(--space-4);
-      justify-content: center;
-      flex-wrap: wrap;
-    }
-    .features { padding: 0 var(--space-8) var(--space-16); }
-    .features__grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-      gap: var(--space-6);
-      max-width: var(--max-content);
-      margin: 0 auto;
-    }
-    .feature-card { text-align: center; padding: var(--space-8) var(--space-6); }
-    .feature-card__icon { font-size: 2.5rem; margin-bottom: var(--space-4); }
-    .feature-card__title {
-      font-family: var(--ff-display);
-      font-size: var(--fs-lg);
-      font-weight: var(--fw-semibold);
-      color: var(--clr-text-primary);
-      margin-bottom: var(--space-2);
-    }
-    .feature-card__desc {
-      font-size: var(--fs-sm);
-      color: var(--clr-text-secondary);
-      line-height: var(--lh-relaxed);
-    }
-  </style>
 </head>
 <body>
-  <!-- Skip to content (accessibility) -->
-  <a href="#app-view" id="skip-to-content" class="sr-only" style="position:absolute;left:-9999px;top:auto;width:1px;height:1px;overflow:hidden;">
-    Skip to main content
-  </a>
+  <a href="#main-content" class="skip-link">Skip to main content</a>
 
-  <!-- ARIA Live Region -->
-  <div id="aria-live-region" aria-live="polite" aria-atomic="true" role="status" class="sr-only"></div>
+  <header class="mobile-header">
+    <div class="mobile-header__brand" id="mobile-menu-btn">
+      <span class="material-symbols-outlined">how_to_vote</span>
+      <span class="mobile-header__title">ElectIQ</span>
+    </div>
+    <div class="mobile-header__actions">
+      <button class="btn btn--icon" id="mobile-tts-toggle" aria-label="Toggle speech">
+        <span class="material-symbols-outlined">volume_up</span>
+      </button>
+      <button class="btn btn--icon" id="theme-toggle-mobile" aria-label="Toggle theme">
+        <span class="material-symbols-outlined">light_mode</span>
+      </button>
+    </div>
+  </header>
 
-  <!-- Mobile sidebar overlay -->
-  <div class="sidebar-overlay"></div>
-
-  <!-- App Shell -->
-  <div class="app app--no-sidebar" id="app">
-
-    <!-- Header -->
-    <header class="header" role="banner">
-      <div class="header__brand">
-        <button class="btn btn--icon header__menu-btn" id="menu-toggle" aria-label="Toggle menu">
-          <span class="material-symbols-outlined">menu</span>
-        </button>
-        <span class="header__title">ElectIQ</span>
+  <aside class="sidebar">
+    <div class="sidebar__brand">
+      <span class="material-symbols-outlined" style="font-size: 32px; color: var(--color-primary);">how_to_vote</span>
+      <div>
+        <div class="sidebar__title">ElectIQ</div>
+        <div class="sidebar__tagline">AI Election Guide</div>
       </div>
-
-      <nav class="header__nav" role="navigation" aria-label="Main navigation">
-        <a href="#/" class="header__nav-link" data-route="/">Home</a>
-        <a href="#/chat" class="header__nav-link" data-route="/chat">Chat</a>
-        <a href="#/timeline" class="header__nav-link" data-route="/timeline">Timeline</a>
-        <a href="#/about" class="header__nav-link" data-route="/about">About</a>
-      </nav>
-
-      <div class="header__actions">
-        <button class="theme-toggle" id="theme-toggle" aria-label="Toggle theme">
-          <span class="material-symbols-outlined">light_mode</span>
-        </button>
+    </div>
+    
+    <nav class="sidebar__nav" aria-label="Main Navigation">
+      <a href="#/chat" class="sidebar__link" data-route="/chat"><span class="material-symbols-outlined">chat</span> Chat</a>
+      <a href="#/timeline" class="sidebar__link" data-route="/timeline"><span class="material-symbols-outlined">timeline</span> Timeline</a>
+      <a href="#/voter-journey" class="sidebar__link" data-route="/voter-journey"><span class="material-symbols-outlined">route</span> Voter Journey</a>
+      <a href="#/glossary" class="sidebar__link" data-route="/glossary"><span class="material-symbols-outlined">menu_book</span> Glossary</a>
+    </nav>
+    
+    <div class="sidebar__footer">
+      <div class="sidebar__badge">Powered by Gemini</div>
+      <div class="sidebar__status">
+        <span class="status-dot"></span> <span id="firebase-status">Connected</span>
       </div>
-    </header>
+      <button class="theme-toggle" id="theme-toggle" aria-label="Toggle theme">
+        <span class="material-symbols-outlined">light_mode</span> Theme
+      </button>
+    </div>
+  </aside>
 
-    <!-- Main Content / Router Outlet -->
-    <main class="main" role="main">
-      <div id="app-view"></div>
-    </main>
-  </div>
+  <main class="content" id="main-content">
+    <div id="app-view">
+      <section class="hero">
+        <div class="hero__content">
+          <h1 class="hero__title">Understand Your <span class="hero__title-highlight">Election Process</span></h1>
+          <p class="hero__subtitle">Your interactive AI-powered guide. Loading...</p>
+        </div>
+      </section>
+    </div>
+  </main>
 
-  <!-- App Script -->
+  <nav class="bottom-tab-bar" aria-label="Mobile Navigation">
+    <a href="#/chat" class="tab-btn" data-route="/chat"><span class="material-symbols-outlined">chat</span><span>Chat</span></a>
+    <a href="#/timeline" class="tab-btn" data-route="/timeline"><span class="material-symbols-outlined">timeline</span><span>Timeline</span></a>
+    <a href="#/voter-journey" class="tab-btn" data-route="/voter-journey"><span class="material-symbols-outlined">route</span><span>Journey</span></a>
+    <a href="#/glossary" class="tab-btn" data-route="/glossary"><span class="material-symbols-outlined">menu_book</span><span>Glossary</span></a>
+  </nav>
+
   <script type="module" src="/assets/js/main.js"></script>
 </body>
 </html>

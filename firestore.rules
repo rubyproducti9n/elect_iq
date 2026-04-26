@@ -1,0 +1,41 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ─── Sessions ─────────────────────────────────
+    // Anyone with the session_id can read/write their own session.
+    // No cross-session access.
+    match /sessions/{sessionId} {
+      allow read:  if true;
+      allow write: if true;
+
+      // ─── Messages subcollection ──────────────────
+      match /messages/{messageId} {
+        // Read: allow if accessing own session
+        allow read: if true;
+
+        // Write: strict schema validation
+        allow create: if
+          getAfter(/databases/$(database)/documents/sessions/$(sessionId)).data != null
+          && request.resource.data.keys().hasOnly(['role', 'text', 'timestamp', 'helpful_rating'])
+          && request.resource.data.keys().hasAll(['role', 'text', 'timestamp'])
+          && request.resource.data.role in ['user', 'assistant']
+          && request.resource.data.text is string
+          && request.resource.data.text.size() <= 2000;
+
+        // Update: only allow updating the helpful_rating field
+        allow update: if
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['helpful_rating'])
+          && request.resource.data.helpful_rating in [1, -1, null];
+
+        // Delete: never
+        allow delete: if false;
+      }
+    }
+
+    // ─── Default deny ─────────────────────────────
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

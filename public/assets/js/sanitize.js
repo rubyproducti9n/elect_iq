@@ -35,12 +35,16 @@ function escapeHtml(str) {
 export function sanitizeInput(input) {
   if (typeof input !== 'string') return '';
 
+  if (input.length > 500) {
+    throw new Error('Input exceeds maximum length of 500 characters.');
+  }
+
   const purify = getPurify();
   const cleaned = purify
     ? purify.sanitize(input, { ALLOWED_TAGS: [], ALLOWED_ATTR: [] })
     : escapeHtml(input);
 
-  return cleaned.trim().slice(0, 4000); // Max input length
+  return cleaned.trim();
 }
 
 /**

@@ -1,0 +1,206 @@
+/* ═══════════════════════════════════════════════
+   ElectIQ — Shared UI Components (CSS)
+   ═══════════════════════════════════════════════ */
+
+/* ─── Toast Notifications ─── */
+.toast-container {
+  position: fixed;
+  bottom: var(--space-6);
+  right: var(--space-6);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  z-index: 9999;
+  pointer-events: none; /* Let clicks pass through container */
+}
+
+.toast {
+  pointer-events: auto; /* Re-enable clicks for individual toasts */
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  background: var(--clr-surface);
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+  color: var(--clr-text-primary);
+  min-width: 250px;
+  max-width: 400px;
+  transform: translateX(120%);
+  opacity: 0;
+  transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+.toast--enter {
+  transform: translateX(0);
+  opacity: 1;
+}
+
+.toast--exit {
+  transform: translateX(120%);
+  opacity: 0;
+  transition: all 0.3s var(--ease-in);
+}
+
+.toast__icon {
+  font-size: 20px;
+}
+
+.toast--success .toast__icon { color: var(--clr-success); }
+.toast--error .toast__icon { color: var(--clr-error); }
+.toast--info .toast__icon { color: var(--clr-primary-400); }
+
+.toast__msg {
+  flex: 1;
+  font-size: var(--fs-sm);
+  line-height: var(--lh-normal);
+}
+
+.toast__close {
+  background: none;
+  border: none;
+  color: var(--clr-text-muted);
+  cursor: pointer;
+  padding: var(--space-1);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-full);
+  transition: background 0.2s;
+}
+
+.toast__close:hover {
+  background: rgba(255,255,255,0.1);
+  color: var(--clr-text-primary);
+}
+
+/* ─── Modal Dialog ─── */
+.modal-overlay {
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0,0,0,0.6);
+  backdrop-filter: blur(4px);
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-4);
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.3s var(--ease-out), visibility 0.3s;
+}
+
+.modal-overlay--enter {
+  opacity: 1;
+  visibility: visible;
+}
+
+.modal {
+  background: var(--clr-bg-primary);
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: var(--radius-xl);
+  width: 100%;
+  max-width: 500px;
+  box-shadow: 0 20px 40px rgba(0,0,0,0.5);
+  transform: scale(0.95) translateY(10px);
+  opacity: 0;
+  transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+.modal--enter {
+  transform: scale(1) translateY(0);
+  opacity: 1;
+}
+
+.modal__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-4) var(--space-5);
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+}
+
+.modal__title {
+  font-family: var(--ff-display);
+  font-size: var(--fs-lg);
+  font-weight: var(--fw-semibold);
+  color: var(--clr-text-primary);
+}
+
+.modal__close {
+  background: none;
+  border: none;
+  color: var(--clr-text-muted);
+  cursor: pointer;
+  width: 32px; height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-full);
+  transition: all 0.2s;
+}
+
+.modal__close:hover {
+  background: rgba(255,255,255,0.1);
+  color: var(--clr-text-primary);
+}
+
+.modal__body {
+  padding: var(--space-5);
+  font-size: var(--fs-sm);
+  color: var(--clr-text-secondary);
+  line-height: var(--lh-relaxed);
+}
+
+.modal__footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-3);
+  padding: var(--space-4) var(--space-5);
+  border-top: 1px solid rgba(255,255,255,0.06);
+  background: var(--clr-surface);
+  border-bottom-left-radius: var(--radius-xl);
+  border-bottom-right-radius: var(--radius-xl);
+}
+
+.modal__btn {
+  padding: var(--space-2) var(--space-4);
+  border-radius: var(--radius-full);
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-medium);
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.modal__btn--cancel {
+  background: transparent;
+  border: 1px solid rgba(255,255,255,0.1);
+  color: var(--clr-text-primary);
+}
+
+.modal__btn--cancel:hover {
+  background: rgba(255,255,255,0.05);
+  border-color: rgba(255,255,255,0.2);
+}
+
+.modal__btn--primary {
+  background: var(--clr-primary-500);
+  border: none;
+  color: #fff;
+}
+
+.modal__btn--primary:hover {
+  background: var(--clr-primary-400);
+}
+
+/* ─── Reduced Motion ─── */
+@media (prefers-reduced-motion: reduce) {
+  .toast,
+  .toast--exit,
+  .modal-overlay,
+  .modal {
+    transition: none !important;
+    transform: none !important;
+  }
+}
