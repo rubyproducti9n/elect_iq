@@ -1,0 +1,76 @@
+/* ═══════════════════════════════════════════════
+   ElectIQ — Responsive Breakpoints
+   ═══════════════════════════════════════════════ */
+
+/* Tablet: ≤ 1024px */
+@media (max-width: 1024px) {
+  .app {
+    grid-template-columns: 1fr;
+    grid-template-areas: "header" "main";
+  }
+
+  .sidebar {
+    position: fixed;
+    left: 0;
+    top: 0;
+    transform: translateX(-100%);
+    z-index: var(--z-overlay);
+    box-shadow: var(--shadow-xl);
+  }
+
+  .sidebar--open { transform: translateX(0); }
+
+  .sidebar-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.5);
+    z-index: calc(var(--z-overlay) - 1);
+  }
+
+  .sidebar-overlay--visible { display: block; }
+
+  .header__menu-btn { display: flex; }
+
+  .main__content { padding: var(--space-6); }
+}
+
+/* Mobile: ≤ 768px */
+@media (max-width: 768px) {
+  :root {
+    --header-height: 56px;
+  }
+
+  .header { padding: 0 var(--space-4); }
+  .header__title { font-size: var(--fs-lg); }
+  .header__nav { display: none; }
+
+  .main__content { padding: var(--space-4); }
+
+  .chat__messages { padding: var(--space-4); }
+  .chat__input-area { padding: var(--space-3) var(--space-4) var(--space-4); }
+  .message { max-width: 92%; }
+
+  .timeline__event { padding-left: 48px; }
+  .timeline__line { left: 16px; }
+  .timeline__dot { left: 8px; width: 16px; height: 16px; }
+
+  .chat__suggestions { gap: var(--space-2); }
+  .chat__suggestion { font-size: var(--fs-xs); padding: var(--space-2) var(--space-4); }
+}
+
+/* Small mobile: ≤ 480px */
+@media (max-width: 480px) {
+  .chat__welcome-title { font-size: var(--fs-xl); }
+  .chat__welcome { padding: var(--space-8) var(--space-4); }
+
+  .timeline__card { padding: var(--space-4); }
+  .timeline__title { font-size: var(--fs-base); }
+
+  .btn { padding: var(--space-2) var(--space-4); font-size: var(--fs-xs); }
+}
+
+/* Desktop menu button hidden */
+@media (min-width: 1025px) {
+  .header__menu-btn { display: none; }
+}

@@ -1,0 +1,537 @@
+{
+  "meta": {
+    "title": "Indian General Election Knowledge Base",
+    "version": "1.0.0",
+    "lastUpdated": "2026-04-26",
+    "source": "Election Commission of India (ECI)",
+    "coverage": "Lok Sabha General Elections"
+  },
+  "phases": [
+    {
+      "phase": 1,
+      "name": "Pre-Election Preparation",
+      "description": "ECI announces the election schedule. The Model Code of Conduct (MCC) comes into effect immediately from the announcement date.",
+      "key_dates": {
+        "announcement": "45-60 days before first polling date",
+        "mcc_start": "Same day as announcement",
+        "gazette_notification": "Within 14 days of announcement"
+      },
+      "states_covered": [
+        "All 28 States",
+        "8 Union Territories"
+      ],
+      "steps": [
+        "ECI holds press conference to announce election schedule",
+        "Model Code of Conduct comes into force immediately",
+        "Gazette notification issued by President of India",
+        "Electoral rolls are frozen",
+        "Transfer of government officials who served 3+ years in same district",
+        "Security forces deployment planning begins",
+        "EVMs and VVPATs are allocated and tested"
+      ]
+    },
+    {
+      "phase": 2,
+      "name": "Nomination & Scrutiny",
+      "description": "Candidates file nomination papers with the Returning Officer. Papers are scrutinized for eligibility, and candidates may withdraw before the deadline.",
+      "key_dates": {
+        "nomination_start": "After gazette notification",
+        "nomination_last_date": "7-10 days after notification",
+        "scrutiny_date": "Day after last nomination date",
+        "withdrawal_last_date": "2 days after scrutiny"
+      },
+      "states_covered": [
+        "Constituency-specific"
+      ],
+      "steps": [
+        "Candidate collects nomination form (Form 2A/2B) from RO office",
+        "Files nomination with Rs.25,000 security deposit (Rs.12,500 for SC/ST)",
+        "Declares criminal cases, assets, liabilities, education in affidavit",
+        "Returning Officer scrutinizes nominations for eligibility",
+        "Rejected candidates may appeal to ECI",
+        "Candidates may withdraw nominations before deadline",
+        "Final list of contesting candidates published",
+        "Election symbols allotted to independent candidates"
+      ]
+    },
+    {
+      "phase": 3,
+      "name": "Campaign Period",
+      "description": "Candidates and parties campaign for voter support. Campaigning must stop 48 hours before polling day (silence period). All expenditure is tracked.",
+      "key_dates": {
+        "campaign_start": "After withdrawal deadline",
+        "campaign_end": "48 hours before polling day (6 PM)",
+        "silence_period": "Last 48 hours before voting"
+      },
+      "states_covered": [
+        "All contesting constituencies"
+      ],
+      "steps": [
+        "Parties conduct rallies, roadshows, and public meetings",
+        "Door-to-door canvassing by party workers",
+        "TV/Radio/Print/Digital advertising within ECI guidelines",
+        "Permission required for rallies from local authorities",
+        "Campaign expenditure tracked - limit Rs.95 lakh per Lok Sabha candidate",
+        "ECI deploys Flying Squads and Video Surveillance Teams",
+        "Paid news monitoring by MCMC",
+        "Campaigning stops 48 hours before polling"
+      ]
+    },
+    {
+      "phase": 4,
+      "name": "Polling Day",
+      "description": "Voters cast ballots using EVMs at designated polling booths. Each vote is verified by a VVPAT slip. Polling typically runs 7 AM to 6 PM.",
+      "key_dates": {
+        "polling_day": "As per ECI schedule (may span multiple dates)",
+        "polling_hours": "7:00 AM to 6:00 PM"
+      },
+      "states_covered": [
+        "Phase-specific constituencies"
+      ],
+      "steps": [
+        "Voter visits assigned polling booth with valid ID",
+        "Identity verified by polling officer using electoral roll",
+        "Indelible ink applied to left index finger",
+        "Voter proceeds to EVM in screened compartment",
+        "Voter presses button next to chosen candidate on EVM",
+        "VVPAT machine displays printed slip for 7 seconds",
+        "Slip drops into sealed VVPAT box automatically",
+        "Voter exits the booth",
+        "Presiding Officer seals EVM after last voter",
+        "EVMs transported to strongroom under armed escort"
+      ]
+    },
+    {
+      "phase": 5,
+      "name": "Counting & Results",
+      "description": "Votes counted at designated counting centers under CCTV surveillance. Results declared constituency-wise by the Returning Officer.",
+      "key_dates": {
+        "counting_day": "3-4 days after last phase of polling",
+        "results": "Same day as counting (usually by evening)"
+      },
+      "states_covered": [
+        "All constituencies simultaneously"
+      ],
+      "steps": [
+        "Counting centers set up with three-tier security",
+        "Postal ballots counted first",
+        "EVM votes counted round-by-round (14 EVMs per round)",
+        "VVPAT slips of 5 random booths per constituency physically verified",
+        "Candidates and agents observe counting process",
+        "Returning Officer tallies totals and declares result",
+        "Result transmitted electronically to ECI",
+        "Winning candidate gets Certificate of Election",
+        "ECI publishes complete constituency-wise results",
+        "Elected MPs take oath within specified period"
+      ]
+    }
+  ],
+  "voter_journey": [
+    {
+      "step": 1,
+      "id": "register",
+      "title": "Register as a Voter",
+      "description": "Any Indian citizen aged 18+ on the qualifying date (Jan 1 of revision year) can register. Registration adds your name to the Electoral Roll.",
+      "documents_needed": [
+        "Aadhaar Card",
+        "Passport-size photograph",
+        "Proof of age (Birth certificate, 10th marksheet, or Passport)",
+        "Proof of address (Aadhaar, Utility bill, Passport, Bank passbook)",
+        "Form 6A for address migration if shifting residence"
+      ],
+      "online_url": "https://voters.eci.gov.in",
+      "offline_process": "Visit nearest BLO or District Election Office. Fill Form 6 for new registration. Submit with documents. BLO will verify at your address."
+    },
+    {
+      "step": 2,
+      "id": "verify",
+      "title": "Verify Your Name & Details",
+      "description": "Before election day, verify your name appears on the Electoral Roll and all details are correct.",
+      "documents_needed": [
+        "EPIC number (Voter ID number) or Name and constituency details"
+      ],
+      "online_url": "https://electoralsearch.eci.gov.in",
+      "offline_process": "Visit local BLO or call ECI helpline 1950. Check voter list at local ERO/AERO office. File Form 8 for corrections."
+    },
+    {
+      "step": 3,
+      "id": "find_booth",
+      "title": "Find Your Polling Booth",
+      "description": "Each voter is assigned a specific polling booth based on their Electoral Roll address.",
+      "documents_needed": [
+        "EPIC (Voter ID Card) or Voter Slip distributed by BLO"
+      ],
+      "online_url": "https://electoralsearch.eci.gov.in",
+      "offline_process": "BLO distributes voter slips door-to-door. The slip has your name, booth number, and address. Call 1950 or use Voter Helpline App."
+    },
+    {
+      "step": 4,
+      "id": "vote",
+      "title": "Cast Your Vote",
+      "description": "On polling day, visit your assigned booth with a valid photo ID. Cast your vote on the EVM.",
+      "documents_needed": [
+        "Any one of: EPIC, Aadhaar, Passport, Driving License, PAN Card, MNREGA Job Card, Bank/Post Office passbook with photo, or government-issued photo ID"
+      ],
+      "online_url": "https://voters.eci.gov.in",
+      "offline_process": "Go to assigned booth (7 AM-6 PM). Show ID to polling officer. Get ink on finger. Press button next to chosen candidate on EVM. Check VVPAT slip. Press NOTA if you reject all candidates."
+    },
+    {
+      "step": 5,
+      "id": "result",
+      "title": "Check Results",
+      "description": "Results declared on counting day. Track live counting and final results through ECI channels.",
+      "documents_needed": [],
+      "online_url": "https://results.eci.gov.in",
+      "offline_process": "Watch Doordarshan or news channels. Results displayed at counting centres. RO declares final result."
+    }
+  ],
+  "key_bodies": [
+    {
+      "id": "eci",
+      "name": "Election Commission of India (ECI)",
+      "role": "Supreme constitutional body that conducts, supervises, and controls all elections to Parliament and State Legislatures. Enforces MCC, registers parties, allots symbols.",
+      "contact": "Helpline: 1950 | https://eci.gov.in | Voter Helpline App"
+    },
+    {
+      "id": "cec",
+      "name": "Chief Election Commissioner (CEC)",
+      "role": "Heads the Election Commission. Appointed by the President. Has tenure protection equal to a Supreme Court judge.",
+      "contact": "Through ECI official channels"
+    },
+    {
+      "id": "ro",
+      "name": "Returning Officer (RO)",
+      "role": "Senior district official responsible for conducting elections in a constituency. Oversees nominations, scrutiny, polling, counting, and result declaration.",
+      "contact": "District Collectorate or DEO office"
+    },
+    {
+      "id": "deo",
+      "name": "District Election Officer (DEO)",
+      "role": "Supervises the entire election process at district level. Coordinates EVM distribution, security deployment, and voter awareness (SVEEP).",
+      "contact": "District Collectorate"
+    },
+    {
+      "id": "ero",
+      "name": "Electoral Registration Officer (ERO)",
+      "role": "Prepares, revises, and maintains the Electoral Roll. Processes new registrations (Form 6) and corrections (Form 8).",
+      "contact": "Tehsil or Sub-Divisional office"
+    },
+    {
+      "id": "blo",
+      "name": "Booth Level Officer (BLO)",
+      "role": "Local government employee assigned to a polling booth area. Does door-to-door voter verification, distributes voter slips, assists with registration.",
+      "contact": "Voter Helpline App or https://voters.eci.gov.in"
+    }
+  ],
+  "timeline_milestones": [
+    {
+      "id": "tl_01",
+      "date": "Day 0",
+      "label": "Election Announcement",
+      "category": "announcement",
+      "description": "ECI announces dates. Model Code of Conduct takes immediate effect."
+    },
+    {
+      "id": "tl_02",
+      "date": "Day 1-7",
+      "label": "Gazette Notification Issued",
+      "category": "announcement",
+      "description": "President issues notification calling upon constituencies to elect members."
+    },
+    {
+      "id": "tl_03",
+      "date": "Day 7-14",
+      "label": "Nomination Filing Opens",
+      "category": "nomination",
+      "description": "Candidates file nomination papers with RO. Security deposit of Rs.25,000 required."
+    },
+    {
+      "id": "tl_04",
+      "date": "Day 14-15",
+      "label": "Last Date of Nomination",
+      "category": "nomination",
+      "description": "Deadline for filing nomination papers."
+    },
+    {
+      "id": "tl_05",
+      "date": "Day 16",
+      "label": "Scrutiny of Nominations",
+      "category": "nomination",
+      "description": "Returning Officer examines all nominations for completeness and eligibility."
+    },
+    {
+      "id": "tl_06",
+      "date": "Day 18",
+      "label": "Last Date of Withdrawal",
+      "category": "nomination",
+      "description": "Candidates may withdraw. After this, final candidate list and symbols published."
+    },
+    {
+      "id": "tl_07",
+      "date": "Day 18-40",
+      "label": "Campaign Period",
+      "category": "campaign",
+      "description": "Intense campaigning: rallies, roadshows, TV ads, social media. Expenditure tracked."
+    },
+    {
+      "id": "tl_08",
+      "date": "Day 38",
+      "label": "Campaign Silence Begins",
+      "category": "campaign",
+      "description": "Campaigning stops 48 hours before polling. No public meetings or canvassing."
+    },
+    {
+      "id": "tl_09",
+      "date": "Day 40",
+      "label": "Polling Day",
+      "category": "polling",
+      "description": "Voters cast ballots at designated booths (7 AM-6 PM) using EVMs."
+    },
+    {
+      "id": "tl_10",
+      "date": "Day 40 (evening)",
+      "label": "EVMs Sealed & Stored",
+      "category": "polling",
+      "description": "EVMs sealed in presence of candidates agents, transported to strongrooms under armed guard."
+    },
+    {
+      "id": "tl_11",
+      "date": "Day 43-44",
+      "label": "Counting Day",
+      "category": "counting",
+      "description": "Votes counted at designated centres. Postal ballots counted first. EVM results round by round."
+    },
+    {
+      "id": "tl_12",
+      "date": "Day 43-44",
+      "label": "VVPAT Verification",
+      "category": "counting",
+      "description": "Paper trails of 5 random booths per constituency physically counted to verify EVM accuracy."
+    },
+    {
+      "id": "tl_13",
+      "date": "Day 44",
+      "label": "Results Declared",
+      "category": "result",
+      "description": "Returning Officer declares winner constituency-wise. Results uploaded to ECI website."
+    },
+    {
+      "id": "tl_14",
+      "date": "Day 45-50",
+      "label": "Certificates Issued",
+      "category": "result",
+      "description": "Winning candidates receive Certificate of Election. Gazette notification published."
+    },
+    {
+      "id": "tl_15",
+      "date": "Day 50-60",
+      "label": "Government Formation",
+      "category": "result",
+      "description": "Party/coalition with 272+ Lok Sabha seats invited by President to form government."
+    }
+  ],
+  "faq": [
+    {
+      "question": "What is the minimum age to vote in India?",
+      "answer": "You must be at least 18 years old on the qualifying date (January 1 of the year of electoral roll revision) to register and vote."
+    },
+    {
+      "question": "How do I register as a new voter?",
+      "answer": "Fill Form 6 online at https://voters.eci.gov.in or offline at your nearest BLO/ERO office. Attach proof of age, address, and a photo. BLO will verify your details."
+    },
+    {
+      "question": "What is an EPIC and is it mandatory to vote?",
+      "answer": "EPIC is the Electors Photo Identity Card (Voter ID). While primary, it is not mandatory. You can use any of 12 government-issued photo IDs approved by ECI."
+    },
+    {
+      "question": "What photo IDs are accepted at the polling booth?",
+      "answer": "EPIC, Aadhaar, Passport, Driving License, PAN Card, MNREGA Job Card, Smart Card under NPR, Bank/Post Office passbook with photo, Service ID for govt employees, Health Insurance smart card (RSBY), Student ID from recognized institution."
+    },
+    {
+      "question": "What is an EVM and how does it work?",
+      "answer": "An Electronic Voting Machine records votes. It has a Ballot Unit (candidate buttons) and Control Unit (operated by Presiding Officer). Runs on batteries, no internet, tamper-proof one-time programmable chips."
+    },
+    {
+      "question": "What is VVPAT?",
+      "answer": "Voter Verifiable Paper Audit Trail. A printer attached to the EVM that prints a slip showing candidate name and symbol voted for, visible for 7 seconds through a transparent window."
+    },
+    {
+      "question": "What is NOTA?",
+      "answer": "None Of The Above - the last option on the EVM. If you do not wish to vote for any candidate, press NOTA. NOTA votes are counted but do not affect the result."
+    },
+    {
+      "question": "Can I vote if I have shifted to a new city?",
+      "answer": "Yes, but transfer your registration first. Fill Form 6A online at https://voters.eci.gov.in with new address proof. Your name will be added to the new constituency roll."
+    },
+    {
+      "question": "What is the Model Code of Conduct (MCC)?",
+      "answer": "A set of ECI guidelines that parties and candidates must follow from election announcement until results. Prohibits the ruling party from announcing new policies after MCC is in force."
+    },
+    {
+      "question": "Is voting compulsory in India?",
+      "answer": "No, voting is not compulsory at the national level. It is a right, not a legal obligation, under the Representation of the People Act, 1951."
+    },
+    {
+      "question": "What is a postal ballot and who can use it?",
+      "answer": "Voting by mail available to armed forces, govt employees on election duty, voters above 85, persons with 40%+ disability, voters in preventive detention, and essential service workers."
+    },
+    {
+      "question": "How many seats are in the Lok Sabha?",
+      "answer": "543 elected members. Maximum strength is 552 (up to 2 nominated Anglo-Indian members, discontinued via 104th Amendment in 2020)."
+    },
+    {
+      "question": "What is the election expenditure limit?",
+      "answer": "Rs.95 lakh per Lok Sabha candidate in larger states, Rs.75 lakh in smaller states/UTs (revised 2022). Candidates must file expenditure reports within 30 days of result."
+    },
+    {
+      "question": "What happens if there is a tie?",
+      "answer": "Decided by draw of lots conducted by the Returning Officer, as per Section 65 of the Representation of the People Act, 1951."
+    },
+    {
+      "question": "Can NRIs vote in Indian elections?",
+      "answer": "Yes, NRIs with Indian passports can register as overseas voters via Form 6A. However, they must be physically present at their registered booth. No online/postal voting for NRIs yet."
+    },
+    {
+      "question": "What is a by-election?",
+      "answer": "Held when a seat falls vacant due to death, resignation, or disqualification. ECI must fill the vacancy within 6 months unless remaining term is less than one year."
+    },
+    {
+      "question": "What is the role of indelible ink?",
+      "answer": "Ink with silver nitrate applied to the left index finger after voting. Prevents double-voting. Lasts several weeks and cannot be easily removed."
+    },
+    {
+      "question": "How can I report election malpractice?",
+      "answer": "Use the cVIGIL app (photo/video evidence, resolved within 100 minutes), call Voter Helpline 1950, visit https://ngsp.in, or go to your local RO/DEO office."
+    },
+    {
+      "question": "What is SVEEP?",
+      "answer": "Systematic Voters Education and Electoral Participation - ECI flagship program to increase voter awareness and turnout among women, youth, urban voters, and marginalized communities."
+    },
+    {
+      "question": "Can a person contest from multiple constituencies?",
+      "answer": "Yes, maximum 2 constituencies simultaneously (Section 33(7) of RPA 1951). If they win both, they must vacate one within 14 days, triggering a by-election."
+    }
+  ],
+  "glossary": [
+    {
+      "term": "Lok Sabha",
+      "definition": "Lower house of Parliament (House of the People). 543 elected members serve 5-year terms. Majority party forms government."
+    },
+    {
+      "term": "Rajya Sabha",
+      "definition": "Upper house of Parliament (Council of States). 245 members elected by state legislators. One-third retire every 2 years."
+    },
+    {
+      "term": "Electoral Roll",
+      "definition": "Official list of persons eligible to vote in a constituency. Maintained and revised by the ERO. Also called voter list."
+    },
+    {
+      "term": "Constituency",
+      "definition": "Geographical area whose eligible voters elect one representative. Lok Sabha has 543 parliamentary constituencies."
+    },
+    {
+      "term": "EVM",
+      "definition": "Electronic Voting Machine. Portable device with Ballot Unit and Control Unit. Battery-operated, no internet, tamper-proof chips."
+    },
+    {
+      "term": "VVPAT",
+      "definition": "Voter Verifiable Paper Audit Trail. Printer attached to EVM generating a paper slip for each vote, visible for 7 seconds."
+    },
+    {
+      "term": "NOTA",
+      "definition": "None Of The Above. Last option on EVM. Introduced by Supreme Court in 2013. Counted but does not invalidate election."
+    },
+    {
+      "term": "Model Code of Conduct",
+      "definition": "Voluntary guidelines enforced by ECI during elections ensuring level playing field and preventing misuse of government machinery."
+    },
+    {
+      "term": "EPIC",
+      "definition": "Electors Photo Identity Card. Official voter ID issued by ECI with name, photo, EPIC number, constituency, and part number."
+    },
+    {
+      "term": "Returning Officer",
+      "definition": "Officer responsible for conducting elections in a constituency - nominations, polling, counting, and declaring results."
+    },
+    {
+      "term": "Booth Level Officer",
+      "definition": "Government official assigned to a polling booth area for voter roll maintenance, verification, and voter slip distribution."
+    },
+    {
+      "term": "Presiding Officer",
+      "definition": "Officer in charge of a polling station on election day. Manages polling staff and seals EVMs after voting ends."
+    },
+    {
+      "term": "Security Deposit",
+      "definition": "Rs.25,000 for general candidates, Rs.12,500 for SC/ST. Forfeited if candidate fails to secure 1/6th of total valid votes."
+    },
+    {
+      "term": "Delimitation",
+      "definition": "Process of redrawing constituency boundaries for equal population representation. Done by Delimitation Commission using Census data."
+    },
+    {
+      "term": "Reserved Constituency",
+      "definition": "Constituency reserved for SC or ST candidates to ensure representation, as mandated by the Constitution."
+    },
+    {
+      "term": "Gazette Notification",
+      "definition": "Official government order in Gazette of India formally initiating the election process for specific constituencies."
+    },
+    {
+      "term": "Silence Period",
+      "definition": "48-hour period before polling day when all campaigning must stop. No public meetings, processions, or canvassing allowed."
+    },
+    {
+      "term": "Indelible Ink",
+      "definition": "Ink with silver nitrate applied to voter finger to prevent double-voting. Manufactured exclusively by Mysore Paints and Varnish Ltd."
+    },
+    {
+      "term": "Strongroom",
+      "definition": "Heavily guarded sealed room where EVMs are stored before and after polling under 24/7 CCTV and multi-layer security."
+    },
+    {
+      "term": "Postal Ballot",
+      "definition": "Voting by mail available to armed forces, govt employees on duty, voters 85+, PwDs, and others notified by ECI."
+    },
+    {
+      "term": "cVIGIL",
+      "definition": "ECI mobile app for citizens to report MCC violations with photo/video evidence. Complaints resolved within 100 minutes."
+    },
+    {
+      "term": "SVEEP",
+      "definition": "Systematic Voters Education and Electoral Participation - ECI voter awareness program to increase informed participation."
+    },
+    {
+      "term": "Anti-Defection Law",
+      "definition": "Tenth Schedule (52nd Amendment, 1985). Disqualifies elected members who leave their party or vote against party directives."
+    },
+    {
+      "term": "Floor Test",
+      "definition": "Process to determine if ruling government has majority support. Members vote for or against the government."
+    },
+    {
+      "term": "Whip",
+      "definition": "Party directive to legislators to vote a specific way. Violating a three-line whip can lead to disqualification."
+    },
+    {
+      "term": "Caretaker Government",
+      "definition": "When MCC is in effect, sitting government makes only routine decisions. Cannot announce new policies or grants."
+    },
+    {
+      "term": "Countermanding",
+      "definition": "Cancellation and rescheduling of elections due to booth capturing, violence, natural disaster, or death of a candidate."
+    },
+    {
+      "term": "Form 6",
+      "definition": "Application form for new voter registration by Indian citizens who have turned 18."
+    },
+    {
+      "term": "Form 6A",
+      "definition": "Application for transferring voter registration when shifting constituency or for NRI voter registration."
+    },
+    {
+      "term": "Voter Turnout",
+      "definition": "Percentage of registered voters who cast votes. India 2024 Lok Sabha election recorded approximately 65.79% turnout."
+    }
+  ]
+}
