@@ -28,7 +28,7 @@ const firebaseConfig = window.__FIREBASE_CONFIG__ || {};
 const Config = Object.freeze({
   /* ── Gemini API ── */
   GEMINI_API_KEY: getVal('gemini-api-key', window.__GEMINI_KEY__),
-  GEMINI_MODEL: 'gemini-1.5-flash',
+  GEMINI_MODEL: 'gemini-2.5-flash-lite',
   GEMINI_ENDPOINT: 'https://generativelanguage.googleapis.com/v1beta/models',
   
   /* ── Firebase ── */

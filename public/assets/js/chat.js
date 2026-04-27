@@ -297,9 +297,11 @@ async function handleSend(els) {
   chatHistory.push({ role: 'user', content: userMessage });
   
   try {
-    await saveMessage('user', userMessage);
+    saveMessage('user', userMessage).catch((err) => {
+      console.warn('[Firebase] Save failed:', err.message);
+    });
   } catch (err) {
-    console.error('[Firebase] Save failed:', err.message);
+    // Should not happen as catch is on the promise, but for safety
   }
 
   // Show typing indicator
