@@ -21,7 +21,7 @@ body {
   bottom: 0;
   width: var(--sidebar-width);
   background: var(--color-surface);
-  border-right: 1px solid rgba(0,0,0,0.1);
+  border-right: 1px solid rgba(0, 0, 0, 0.1);
   display: flex;
   flex-direction: column;
   z-index: 100;
@@ -33,7 +33,7 @@ body {
   align-items: center;
   gap: var(--space-3);
   padding: var(--space-6);
-  border-bottom: 1px solid rgba(0,0,0,0.05);
+  border-bottom: 1px solid rgba(0, 0, 0, 0.05);
 }
 
 .sidebar__title {
@@ -69,22 +69,24 @@ body {
 
 .sidebar__link:hover {
   background: var(--clr-surface-hover);
+  color: var(--color-surface);
 }
 
-.sidebar__link--active, .sidebar__link.active {
+.sidebar__link--active,
+.sidebar__link.active {
   background: var(--color-primary);
   color: #fff;
 }
 
 .sidebar__footer {
   padding: var(--space-4);
-  border-top: 1px solid rgba(0,0,0,0.05);
+  border-top: 1px solid rgba(0, 0, 0, 0.05);
   font-size: var(--fs-xs);
   color: var(--color-text-muted);
 }
 
 .sidebar__badge {
-  background: var(--clr-surface-hover);
+  background: #3d3d3d;
   padding: var(--space-1) var(--space-2);
   border-radius: var(--radius-sm);
   display: inline-block;
@@ -180,7 +182,7 @@ body {
   width: 1px;
   height: 1px;
   overflow: hidden;
-  clip: rect(0,0,0,0);
+  clip: rect(0, 0, 0, 0);
 }
 
 /* Floating Action Button (FAB) */
@@ -209,23 +211,41 @@ body {
 
 /* Animations */
 @keyframes slideInUp {
-  from { transform: translateY(20px); opacity: 0; }
-  to { transform: translateY(0); opacity: 1; }
+  from {
+    transform: translateY(20px);
+    opacity: 0;
+  }
+
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
 }
 
 @keyframes bounce {
-  0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(-5px); }
+
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+
+  50% {
+    transform: translateY(-5px);
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after {
+
+  *,
+  *::before,
+  *::after {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
   }
 }
+
 /* ── Hero & Features ── */
 .hero {
   padding: var(--space-10) var(--space-6);
@@ -249,7 +269,7 @@ body {
 
 .hero__subtitle {
   font-size: var(--fs-lg);
-  color: rgba(255,255,255,0.9);
+  color: rgba(255, 255, 255, 0.9);
   max-width: 600px;
   margin: 0 auto var(--space-8);
 }
@@ -297,6 +317,11 @@ body {
 }
 
 @keyframes slideDown {
-  from { transform: translateY(-100%); }
-  to { transform: translateY(0); }
+  from {
+    transform: translateY(-100%);
+  }
+
+  to {
+    transform: translateY(0);
+  }
 }

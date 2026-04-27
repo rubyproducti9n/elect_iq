@@ -13,29 +13,35 @@ function validateConfig(config, requiredKeys) {
   }
 }
 
-const cleanVal = (val) => (typeof val === 'string' && val.startsWith('%VITE_')) ? '' : val;
+/**
+ * Helper to fetch config from meta tags or window variables.
+ */
+const getVal = (metaName, windowVal) => {
+  const meta = document.querySelector(`meta[name="${metaName}"]`)?.getAttribute('content');
+  if (meta && !meta.startsWith('%VITE_')) return meta;
+  if (windowVal && !String(windowVal).startsWith('%VITE_')) return windowVal;
+  return '';
+};
 
 const firebaseConfig = window.__FIREBASE_CONFIG__ || {};
-const geminiKey = cleanVal(window.__GEMINI_KEY__);
-const ttsKey = cleanVal(window.__TTS_KEY__);
 
 const Config = Object.freeze({
   /* ── Gemini API ── */
-  GEMINI_API_KEY: geminiKey,
+  GEMINI_API_KEY: getVal('gemini-api-key', window.__GEMINI_KEY__),
   GEMINI_MODEL: 'gemini-1.5-flash',
   GEMINI_ENDPOINT: 'https://generativelanguage.googleapis.com/v1beta/models',
   
   /* ── Firebase ── */
-  FIREBASE_API_KEY: cleanVal(firebaseConfig.apiKey),
-  FIREBASE_AUTH_DOMAIN: cleanVal(firebaseConfig.authDomain),
-  FIREBASE_PROJECT_ID: cleanVal(firebaseConfig.projectId),
-  FIREBASE_STORAGE_BUCKET: cleanVal(firebaseConfig.storageBucket),
-  FIREBASE_MESSAGING_SENDER_ID: cleanVal(firebaseConfig.messagingSenderId),
-  FIREBASE_APP_ID: cleanVal(firebaseConfig.appId),
-  FIREBASE_MEASUREMENT_ID: cleanVal(firebaseConfig.measurementId),
+  FIREBASE_API_KEY: getVal('firebase-api-key', firebaseConfig.apiKey),
+  FIREBASE_AUTH_DOMAIN: getVal('firebase-auth-domain', firebaseConfig.authDomain),
+  FIREBASE_PROJECT_ID: getVal('firebase-project-id', firebaseConfig.projectId),
+  FIREBASE_STORAGE_BUCKET: getVal('firebase-storage-bucket', firebaseConfig.storageBucket),
+  FIREBASE_MESSAGING_SENDER_ID: getVal('firebase-messaging-sender-id', firebaseConfig.messagingSenderId),
+  FIREBASE_APP_ID: getVal('firebase-app-id', firebaseConfig.appId),
+  FIREBASE_MEASUREMENT_ID: getVal('firebase-measurement-id', firebaseConfig.measurementId),
 
   /* ── Google TTS ── */
-  GOOGLE_TTS_API_KEY: ttsKey,
+  GOOGLE_TTS_API_KEY: getVal('google-tts-api-key', window.__TTS_KEY__),
   GOOGLE_TTS_ENDPOINT: 'https://texttospeech.googleapis.com/v1/text:synthesize'
 });
 

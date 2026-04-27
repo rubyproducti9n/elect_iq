@@ -12,6 +12,17 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.1.6/purify.min.js"></script>
 
   <!-- Styles (Root-relative paths for Vite/Public folder) -->
+  <!-- API Keys (injected at build time) -->
+  <meta name="gemini-api-key" content="%VITE_GEMINI_API_KEY%" />
+  <meta name="firebase-api-key" content="%VITE_FIREBASE_API_KEY%" />
+  <meta name="firebase-auth-domain" content="%VITE_FIREBASE_AUTH_DOMAIN%" />
+  <meta name="firebase-project-id" content="%VITE_FIREBASE_PROJECT_ID%" />
+  <meta name="firebase-storage-bucket" content="%VITE_FIREBASE_STORAGE_BUCKET%" />
+  <meta name="firebase-messaging-sender-id" content="%VITE_FIREBASE_MESSAGING_SENDER_ID%" />
+  <meta name="firebase-app-id" content="%VITE_FIREBASE_APP_ID%" />
+  <meta name="firebase-measurement-id" content="%VITE_FIREBASE_MEASUREMENT_ID%" />
+  <meta name="google-tts-api-key" content="%VITE_GOOGLE_TTS_API_KEY%" />
+
   <link rel="stylesheet" href="/assets/css/variables.css" />
   <link rel="stylesheet" href="/assets/css/reset.css" />
   <link rel="stylesheet" href="/assets/css/layout.css" />
