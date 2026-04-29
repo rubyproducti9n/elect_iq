@@ -1,45 +1,78 @@
 /* ═══════════════════════════════════════════════
-   ElectIQ — Chat UI Controller (v3)
-   ─────────────────────────────────────────────
-   • Streaming responses via askGeminiStream
-   • Voice input (Web Speech API, en-IN)
-   • Message ratings (👍👎 → Firestore)
-   • Auto-scroll with pause detection
-   • Markdown rendering + DOMPurify
-   • Dynamic follow-up suggestion chips
+   ElectIQ — Chat UI Controller
+   Manages message rendering, input, and bot interaction
    ═══════════════════════════════════════════════ */
 
-import { askGemini, askGeminiStream } from './gemini.js';
+import { askGeminiStream } from './gemini.js';
 import { sanitizeInput, sanitizeOutput } from './sanitize.js';
-import { logAnalyticsEvent, saveMessage, initSession, rateMessage } from './firebase.js';
+import { saveMessage, initSession, rateMessage } from './firebase.js';
+import { trackEvent, trackError } from './analytics.js';
 import { announceToScreenReader } from './accessibility.js';
+import { analyzeUserSentiment, classifyUserIntent, getSentimentPromptPrefix } from './nlp.js';
+import { ok, timed, getEl } from './utils.js';
+import { INPUT, ANALYTICS_EVENTS, ERROR_CODES } from './constants.js';
 
 /* ── State ── */
 let chatHistory = [];
 let isProcessing = false;
 let userHasScrolledUp = false;
-let recognition = null; // Web Speech API instance
+let recognition = null;
+let firstMessageSent = false;
 
-/* ── DOM References ── */
-const $ = (sel) => document.querySelector(sel);
+/* ── DOM Cache ── */
+let els = {};
 
-function getElements() {
-  return {
-    messagesContainer: $('#chat-messages'),
-    inputField:        $('#chat-input'),
-    sendButton:        $('#send-btn'),
-    micButton:         $('#mic-btn'),
-    ttsButton:         $('#chat-tts'),
-    clearButton:       $('#chat-clear'),
-    welcomeSection:    $('#chat-welcome'),
-    suggestionsWrap:   $('#chat-suggestions'),
-    suggestionsRow:    $('#suggestions-row'),
-    typingIndicator:   $('#typing-indicator'),
-    statusLabel:       $('#chat-status'),
+/**
+ * @description Initializes the chat module, binds events, and resumes sessions
+ * @returns {void}
+ */
+export function initChat() {
+  cacheElements();
+  if (!els.messagesContainer) return;
+
+  // Initialize background session
+  initSession().catch(err => trackError({ code: 'SESSION_INIT', message: err.message }));
+
+  renderWelcomeSuggestions();
+  bindEvents();
+  updateTTSButtonUI();
+  initVoiceInput();
+  
+  els.inputField?.focus();
+
+  // Handle external redirects with pre-filled queries
+  const prefill = localStorage.getItem('electiq_chat_prefill');
+  if (prefill && els.inputField) {
+    els.inputField.value = prefill;
+    adjustInputHeight();
+    localStorage.removeItem('electiq_chat_prefill');
+  }
+}
+
+/**
+ * @description Caches DOM elements once at initialization to improve performance
+ * @returns {void}
+ */
+function cacheElements() {
+  els = {
+    messagesContainer: getEl('chat-messages'),
+    inputField:        getEl('chat-input'),
+    sendButton:        getEl('send-btn'),
+    micButton:         getEl('mic-btn'),
+    ttsButton:         getEl('chat-tts'),
+    clearButton:       getEl('chat-clear'),
+    welcomeSection:    getEl('chat-welcome'),
+    suggestionsWrap:   getEl('chat-suggestions'),
+    suggestionsRow:    getEl('suggestions-row'),
+    typingIndicator:   getEl('typing-indicator'),
+    statusLabel:       getEl('chat-status'),
   };
 }
 
-/* ── Quick-Start Suggestions ── */
+/* ─────────────────────────────────────────────
+   1. SUGGESTION CHIPS
+   ───────────────────────────────────────────── */
+
 const WELCOME_SUGGESTIONS = [
   'How do I register to vote?',
   'What is ECI?',
@@ -48,202 +81,157 @@ const WELCOME_SUGGESTIONS = [
   'What is NOTA?',
 ];
 
-/* ═══════════════════════════════════════════════
-   INIT
-   ═══════════════════════════════════════════════ */
-export function initChat() {
-  const els = getElements();
-  if (!els.messagesContainer) return;
-
-  // Initialize Firestore session (non-blocking)
-  initSession().catch((err) =>
-    console.warn('[Chat] Session init skipped:', err.message)
-  );
-
-  renderWelcomeSuggestions(els);
-  bindEvents(els);
-  updateTTSButtonState(els);
-  initVoiceInput(els);
-  els.inputField?.focus();
-
-  // Check for pre-filled chat query from other pages
-  const prefill = localStorage.getItem('electiq_chat_prefill');
-  if (prefill && els.inputField) {
-    els.inputField.value = prefill;
-    els.inputField.style.height = 'auto';
-    els.inputField.style.height = `${Math.min(els.inputField.scrollHeight, 120)}px`;
-    localStorage.removeItem('electiq_chat_prefill');
-  }
-}
-
-/* ═══════════════════════════════════════════════
-   SUGGESTION CHIPS
-   ═══════════════════════════════════════════════ */
-
-function renderWelcomeSuggestions(els) {
+/**
+ * @description Renders initial help chips for first-time users
+ * @returns {void}
+ */
+function renderWelcomeSuggestions() {
   if (!els.suggestionsWrap) return;
-  els.suggestionsWrap.innerHTML = WELCOME_SUGGESTIONS.map(
-    (text) =>
-      `<button class="chat-suggestion" data-suggestion="${text}">
-        <span class="material-symbols-outlined" style="font-size:16px;">chat_bubble_outline</span>
-        ${text}
-      </button>`
-  ).join('');
+  els.suggestionsWrap.innerHTML = WELCOME_SUGGESTIONS.map(text => `
+    <button class="chat-suggestion" data-suggestion="${text}">
+      <span class="material-symbols-outlined" style="font-size:16px;">chat_bubble_outline</span>
+      ${text}
+    </button>
+  `).join('');
 }
 
-function renderFollowUpSuggestions(questions, els) {
+/**
+ * @description Renders follow-up chips generated by the AI response
+ * @param {string[]} questions - Array of question strings
+ * @returns {void}
+ */
+function renderFollowUpSuggestions(questions) {
   if (!questions?.length || !els.suggestionsRow) return;
 
-  els.suggestionsRow.innerHTML = questions.map(
-    (q) =>
-      `<button class="chat-suggestion chat-suggestion--follow" data-suggestion="${q}">${q}</button>`
-  ).join('');
+  els.suggestionsRow.innerHTML = questions.map(q => `
+    <button class="chat-suggestion chat-suggestion--follow" data-suggestion="${q}">${q}</button>
+  `).join('');
 
   els.suggestionsRow.style.display = 'flex';
 
-  // Bind clicks
-  els.suggestionsRow.querySelectorAll('[data-suggestion]').forEach((btn) => {
+  // Delegate clicks for efficiency
+  els.suggestionsRow.querySelectorAll('[data-suggestion]').forEach(btn => {
     btn.addEventListener('click', () => {
       els.inputField.value = btn.dataset.suggestion;
-      logAnalyticsEvent('suggested_question_clicked', { question_text: btn.dataset.suggestion });
-      els.suggestionsRow.innerHTML = '';
-      els.suggestionsRow.style.display = 'none';
-      handleSend(els);
+      trackEvent('suggested_question_clicked', { question: btn.dataset.suggestion });
+      clearFollowUpSuggestions();
+      handleSend();
     }, { once: true });
   });
 }
 
-function clearFollowUpSuggestions(els) {
+/**
+ * @description Hides the follow-up suggestions panel
+ * @returns {void}
+ */
+function clearFollowUpSuggestions() {
   if (els.suggestionsRow) {
     els.suggestionsRow.innerHTML = '';
     els.suggestionsRow.style.display = 'none';
   }
 }
 
-/* ═══════════════════════════════════════════════
-   EVENT BINDING
-   ═══════════════════════════════════════════════ */
+/* ─────────────────────────────────────────────
+   2. EVENT BINDING
+   ───────────────────────────────────────────── */
 
-function bindEvents(els) {
-  // Send
-  els.sendButton?.addEventListener('click', () => handleSend(els));
+/**
+ * @description Wires up UI interactions
+ * @returns {void}
+ */
+function bindEvents() {
+  els.sendButton?.addEventListener('click', () => handleSend());
 
-  // Keyboard: Enter sends, Shift+Enter newline, Escape clears
   els.inputField?.addEventListener('keydown', (e) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
-      handleSend(els);
-    }
-    if (e.key === 'Escape') {
-      els.inputField.value = '';
-      els.inputField.style.height = 'auto';
+      handleSend();
     }
   });
 
-  // Auto-resize textarea
-  els.inputField?.addEventListener('input', () => {
-    els.inputField.style.height = 'auto';
-    els.inputField.style.height = `${Math.min(els.inputField.scrollHeight, 120)}px`;
-  });
+  els.inputField?.addEventListener('input', adjustInputHeight);
 
-  // Welcome suggestion chips
   els.suggestionsWrap?.addEventListener('click', (e) => {
     const btn = e.target.closest('[data-suggestion]');
     if (btn) {
       els.inputField.value = btn.dataset.suggestion;
-      logAnalyticsEvent('suggested_question_clicked', { question_text: btn.dataset.suggestion });
-      handleSend(els);
+      handleSend();
     }
   });
 
-  // TTS button: click = speak last message
-  els.ttsButton?.addEventListener('click', () => {
-    const lastAiMessage = [...document.querySelectorAll('.message--bot .message__text')]
-      .pop()?.textContent;
-    if (lastAiMessage) speakText(lastAiMessage);
+  els.ttsButton?.addEventListener('click', async () => {
+    const lastBotMsg = [...document.querySelectorAll('.message--bot .message__text')].pop()?.textContent;
+    if (lastBotMsg) {
+      const { speakText } = await import('./tts.js');
+      speakText(lastBotMsg);
+    }
   });
 
-  // TTS long-press: toggle on/off
-  let ttsLongPress = null;
+  // Long-press toggle for TTS
+  let ttsTimer = null;
   els.ttsButton?.addEventListener('pointerdown', () => {
-    ttsLongPress = setTimeout(async () => {
+    ttsTimer = setTimeout(async () => {
       const { toggleTTS, isTTSEnabled } = await import('./tts.js');
       toggleTTS();
-      updateTTSButtonState(els);
-      announceToScreenReader(isTTSEnabled() ? 'Text to speech enabled' : 'Text to speech disabled');
-      ttsLongPress = null;
+      updateTTSButtonUI();
+      announceToScreenReader(isTTSEnabled() ? 'Voice output enabled' : 'Voice output disabled');
+      ttsTimer = null;
     }, 600);
   });
-  els.ttsButton?.addEventListener('pointerup', () => {
-    if (ttsLongPress) clearTimeout(ttsLongPress);
-  });
+  els.ttsButton?.addEventListener('pointerup', () => clearTimeout(ttsTimer));
 
-  // Clear chat
-  els.clearButton?.addEventListener('click', () => {
-    chatHistory = [];
-    els.messagesContainer.innerHTML = '';
-    clearFollowUpSuggestions(els);
-    // Re-inject welcome
-    els.messagesContainer.innerHTML = buildWelcomeHTML();
-    renderWelcomeSuggestions(els);
-    // Re-bind welcome suggestions
-    const newSuggWrap = $('#chat-suggestions');
-    newSuggWrap?.addEventListener('click', (e) => {
-      const btn = e.target.closest('[data-suggestion]');
-      if (btn) {
-        els.inputField.value = btn.dataset.suggestion;
-        handleSend(els);
-      }
-    });
-  });
+  els.clearButton?.addEventListener('click', clearChat);
 
-  // Auto-scroll detection
   els.messagesContainer?.addEventListener('scroll', () => {
-    const el = els.messagesContainer;
-    const threshold = 80;
-    userHasScrolledUp = (el.scrollHeight - el.scrollTop - el.clientHeight) > threshold;
+    const m = els.messagesContainer;
+    userHasScrolledUp = (m.scrollHeight - m.scrollTop - m.clientHeight) > 100;
   });
 }
 
-/* ═══════════════════════════════════════════════
-   VOICE INPUT (Web Speech API)
-   ═══════════════════════════════════════════════ */
+/**
+ * @description Resizes the input textarea dynamically
+ * @returns {void}
+ */
+function adjustInputHeight() {
+  els.inputField.style.height = 'auto';
+  els.inputField.style.height = `${Math.min(els.inputField.scrollHeight, 150)}px`;
+}
 
-function initVoiceInput(els) {
-  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-  if (!SpeechRecognition) {
-    // Hide mic button if not supported
+/**
+ * @description Resets the chat interface to its initial state
+ * @returns {void}
+ */
+function clearChat() {
+  chatHistory = [];
+  els.messagesContainer.innerHTML = buildWelcomeHTML();
+  clearFollowUpSuggestions();
+  renderWelcomeSuggestions();
+}
+
+/* ─────────────────────────────────────────────
+   3. VOICE INPUT
+   ───────────────────────────────────────────── */
+
+/**
+ * @description Initializes Web Speech Recognition for hands-free queries
+ * @returns {void}
+ */
+function initVoiceInput() {
+  const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SpeechRec) {
     if (els.micButton) els.micButton.style.display = 'none';
     return;
   }
 
-  recognition = new SpeechRecognition();
+  recognition = new SpeechRec();
   recognition.lang = 'en-IN';
-  recognition.interimResults = false;
-  recognition.maxAlternatives = 1;
-
-  recognition.onresult = (event) => {
-    const transcript = event.results[0][0].transcript;
-    els.inputField.value = transcript;
-    els.inputField.dispatchEvent(new Event('input')); // trigger resize
-    logAnalyticsEvent('voice_input_used', {});
+  recognition.onresult = (e) => {
+    els.inputField.value = e.results[0][0].transcript;
+    adjustInputHeight();
   };
 
-  recognition.onstart = () => {
-    els.micButton?.classList.add('chat-input__mic-btn--recording');
-    if (els.statusLabel) els.statusLabel.textContent = 'Listening…';
-  };
-
-  recognition.onend = () => {
-    els.micButton?.classList.remove('chat-input__mic-btn--recording');
-    if (els.statusLabel) els.statusLabel.textContent = 'Online';
-  };
-
-  recognition.onerror = (e) => {
-    console.warn('[Voice] Recognition error:', e.error);
-    els.micButton?.classList.remove('chat-input__mic-btn--recording');
-    if (els.statusLabel) els.statusLabel.textContent = 'Online';
-  };
+  recognition.onstart = () => els.micButton?.classList.add('chat-input__mic-btn--recording');
+  recognition.onend = () => els.micButton?.classList.remove('chat-input__mic-btn--recording');
 
   els.micButton?.addEventListener('click', () => {
     if (els.micButton.classList.contains('chat-input__mic-btn--recording')) {
@@ -254,282 +242,228 @@ function initVoiceInput(els) {
   });
 }
 
-/* ═══════════════════════════════════════════════
-   SEND MESSAGE
-   ═══════════════════════════════════════════════ */
+/* ─────────────────────────────────────────────
+   4. CORE MESSAGE LOGIC
+   ───────────────────────────────────────────── */
 
-async function handleSend(els) {
+/**
+ * @description Orchestrates the message sending workflow
+ * @returns {Promise<void>}
+ * @fires Analytics#chat_message_sent
+ */
+async function handleSend() {
   if (isProcessing) return;
 
-  const rawInput = els.inputField.value.trim();
-  if (!rawInput) return;
+  const raw = els.inputField.value.trim();
+  if (!raw) return;
 
-  // Max input length validation
-  if (rawInput.length > 500) {
-    if (window.showToast) {
-      window.showToast('Message exceeds 500 characters limit.', 'error');
-    } else {
-      alert('Message exceeds 500 characters limit.');
-    }
+  if (raw.length > INPUT.MAX_CHARS) {
+    window.showToast?.(`Max ${INPUT.MAX_CHARS} characters allowed`, 'error');
     return;
   }
 
-  let userMessage;
-  try {
-    userMessage = sanitizeInput(rawInput);
-  } catch (err) {
-    console.error(err);
-    return;
-  }
-
+  const clean = sanitizeInput(raw);
   els.inputField.value = '';
-  els.inputField.style.height = 'auto';
+  adjustInputHeight();
 
-  // Hide welcome on first message
-  const welcome = els.welcomeSection || $('#chat-welcome');
-  if (welcome) welcome.style.display = 'none';
+  // Track first interaction funnel
+  if (!firstMessageSent) {
+    firstMessageSent = true;
+    trackEvent(ANALYTICS_EVENTS.FUNNEL_FIRST_MESSAGE);
+  }
 
-  // Clear previous follow-up chips
-  clearFollowUpSuggestions(els);
+  // Pre-load NLP data in parallel
+  const nlpPromise = Promise.all([
+    analyzeUserSentiment(clean),
+    classifyUserIntent(clean)
+  ]);
 
-  // Append user bubble
-  appendUserMessage(userMessage, els);
-  chatHistory.push({ role: 'user', content: userMessage });
+  // UI Updates
+  if (els.welcomeSection) els.welcomeSection.style.display = 'none';
+  clearFollowUpSuggestions();
   
-  try {
-    saveMessage('user', userMessage).catch((err) => {
-      console.warn('[Firebase] Save failed:', err.message);
-    });
-  } catch (err) {
-    // Should not happen as catch is on the promise, but for safety
-  }
+  const userMsgEl = appendUserMessage(clean);
+  chatHistory.push({ role: 'user', content: clean });
+  saveMessage('user', clean);
 
-  // Show typing indicator
-  showTypingIndicator(els);
-  isProcessing = true;
-  els.sendButton.disabled = true;
-
-  try {
-    // Stream response
-    await handleStreamingSend(userMessage, els);
-  } catch (error) {
-    logAnalyticsEvent('app_error', { message: error.message, location: 'handleSend' });
-    const { textEl } = createBotBubble(els);
-    textEl.innerHTML = `<span class="material-symbols-outlined" style="font-size:18px;vertical-align:middle;color:var(--clr-error,#ef4444);">error</span> Something went wrong. Please try again later.`;
-  } finally {
-    hideTypingIndicator(els);
-    
-    // Debounce: Keep button disabled for 500ms
-    setTimeout(() => {
-      isProcessing = false;
-      els.sendButton.disabled = false;
-      els.inputField.focus();
-    }, 500);
-  }
-}
-
-/* ── Streaming send ── */
-async function handleStreamingSend(userMessage, els) {
-  // Wait 500ms before switching from typing dots to streaming bubble
-  await new Promise((r) => setTimeout(r, 500));
-
-  // Create streaming bubble
-  hideTypingIndicator(els);
-  const { messageEl, textEl } = createBotBubble(els);
-
-  let fullText = '';
-  const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-
-  const result = await askGeminiStream(userMessage, chatHistory.slice(-20), (chunk) => {
-    fullText += chunk;
-    if (!prefersReducedMotion) {
-      textEl.innerHTML = sanitizeOutput(fullText);
-      autoScroll(els);
-    }
+  // Update intent tag when NLP resolves
+  nlpPromise.then(([sentimentRes, intentRes]) => {
+    const tag = userMsgEl.querySelector('.message__intent-tag');
+    if (tag && intentRes.ok) tag.textContent = intentRes.value;
+    if (sentimentRes.ok) trackEvent(ANALYTICS_EVENTS.MESSAGE_SENTIMENT, sentimentRes.value);
   });
 
-  if (result.error) {
-    if (result.code === 429 && window.showToast) {
-      window.showToast(result.message, 'error');
-      messageEl.remove();
-      return;
+  isProcessing = true;
+  els.sendButton.disabled = true;
+  showTypingIndicator();
+
+  try {
+    const [sentimentRes] = await nlpPromise;
+    const prefix = sentimentRes.ok ? getSentimentPromptPrefix(sentimentRes.value.score) : '';
+    await streamBotResponse(clean, prefix);
+  } catch (err) {
+    trackError({ code: 'CHAT_FLOW', message: err.message });
+  } finally {
+    hideTypingIndicator();
+    isProcessing = false;
+    els.sendButton.disabled = false;
+  }
+}
+
+/**
+ * @description Handles the streaming AI response and UI updates
+ * @param {string} userMessage - User query
+ * @param {string} sentimentPrefix - Instruction for the model
+ * @returns {Promise<void>}
+ */
+async function streamBotResponse(userMessage, sentimentPrefix) {
+  const { messageEl, textEl } = createBotBubble();
+  let fullText = '';
+  
+  const streamResult = await askGeminiStream(
+    userMessage, 
+    chatHistory.slice(-20), 
+    (chunk) => {
+      fullText += chunk;
+      textEl.innerHTML = sanitizeOutput(fullText);
+      autoScroll();
     }
-    textEl.innerHTML = `<span class="material-symbols-outlined" aria-hidden="true" style="font-size:18px;vertical-align:middle;color:var(--clr-error,#ef4444);">error</span> ${result.message}`;
-    console.error('[Chat]', result.message);
+  );
+
+  if (!streamResult.ok) {
+    textEl.innerHTML = `<span class="error-msg">${streamResult.error.message}</span>`;
     return;
   }
 
-  // Clean text (strip SUGGESTIONS line)
-  const cleanText = stripSuggestionsLine(fullText);
-  textEl.innerHTML = sanitizeOutput(cleanText);
-
-  chatHistory.push({ role: 'assistant', content: cleanText });
-  saveMessage('assistant', cleanText).catch(() => {});
-
-  // Bind action buttons (rate, TTS, copy)
-  bindMessageActions(messageEl, cleanText);
-
-  // Show follow-up suggestion chips
-  if (result.suggestedQuestions?.length) {
-    renderFollowUpSuggestions(result.suggestedQuestions, els);
+  const botContent = fullText.replace(/SUGGESTIONS:\s*.+/i, '').trim();
+  textEl.innerHTML = sanitizeOutput(botContent);
+  chatHistory.push({ role: 'assistant', content: botContent });
+  
+  saveMessage('assistant', botContent);
+  bindBotActions(messageEl, botContent);
+  
+  if (streamResult.value.suggestedQuestions?.length) {
+    renderFollowUpSuggestions(streamResult.value.suggestedQuestions);
   }
 
-  autoScroll(els);
-  announceToScreenReader('ElectIQ responded');
-  logAnalyticsEvent('chat_message_sent', { question_length: userMessage.length });
+  announceToScreenReader('Response received');
+  trackEvent(ANALYTICS_EVENTS.CHAT_MESSAGE_SENT, { length: userMessage.length });
+
+  // Auto-speak if enabled
+  const { autoSpeak } = await import('./tts.js');
+  autoSpeak(botContent);
 }
 
-function stripSuggestionsLine(raw) {
-  return raw.replace(/SUGGESTIONS:\s*.+/i, '').trim();
-}
+/* ─────────────────────────────────────────────
+   5. RENDERING HELPERS
+   ───────────────────────────────────────────── */
 
-/* ═══════════════════════════════════════════════
-   MESSAGE RENDERING
-   ═══════════════════════════════════════════════ */
-
-function appendUserMessage(text, els) {
-  const initial = (text.charAt(0) || 'U').toUpperCase();
-  const messageEl = document.createElement('div');
-  messageEl.className = 'message message--user';
-  messageEl.setAttribute('role', 'listitem');
-
-  messageEl.innerHTML = `
-    <div class="message__avatar message__avatar--user">${initial}</div>
+/**
+ * @description Creates a user message bubble in the DOM
+ * @param {string} text - Sanitized text
+ * @returns {HTMLElement} The created element
+ */
+function appendUserMessage(text) {
+  const el = document.createElement('div');
+  el.className = 'message message--user';
+  el.innerHTML = `
+    <div class="message__avatar message__avatar--user">${text.charAt(0).toUpperCase()}</div>
     <div class="message__bubble">
       <div class="message__text">${sanitizeOutput(text)}</div>
-      <div class="message__timestamp">${formatTime()}</div>
+      <div class="message__meta">
+        <span class="message__intent-tag"></span>
+        <span class="message__timestamp">${formatTime()}</span>
+      </div>
     </div>
   `;
-
-  els.messagesContainer.appendChild(messageEl);
-  autoScroll(els);
+  els.messagesContainer.appendChild(el);
+  autoScroll();
+  return el;
 }
 
-function createBotBubble(els) {
-  const messageEl = document.createElement('div');
-  messageEl.className = 'message message--bot';
-  messageEl.setAttribute('role', 'listitem');
-
-  messageEl.innerHTML = `
+/**
+ * @description Creates an empty bot bubble with a placeholder for streaming
+ * @returns {{messageEl: HTMLElement, textEl: HTMLElement}}
+ */
+function createBotBubble() {
+  const el = document.createElement('div');
+  el.className = 'message message--bot';
+  el.innerHTML = `
     <div class="message__avatar message__avatar--bot">
-      <span class="material-symbols-outlined" style="font-size:20px;">smart_toy</span>
+      <span class="material-symbols-outlined">smart_toy</span>
     </div>
     <div class="message__bubble">
       <div class="message__text"></div>
       <div class="message__actions">
-        <button class="message__action-btn message__action-btn--rate-up" title="Helpful" aria-label="Rate as helpful">
-          <span class="material-symbols-outlined" style="font-size:16px;">thumb_up</span>
-        </button>
-        <button class="message__action-btn message__action-btn--rate-down" title="Not helpful" aria-label="Rate as not helpful">
-          <span class="material-symbols-outlined" style="font-size:16px;">thumb_down</span>
-        </button>
-        <button class="message__action-btn message__action-btn--tts" title="Read aloud" aria-label="Read this response aloud">
-          <span class="material-symbols-outlined" style="font-size:16px;">volume_up</span>
-        </button>
-        <button class="message__action-btn message__action-btn--copy" title="Copy" aria-label="Copy response">
-          <span class="material-symbols-outlined" style="font-size:16px;">content_copy</span>
-        </button>
+        <button class="message__action-btn message__action-btn--rate-up" title="Helpful"><span class="material-symbols-outlined">thumb_up</span></button>
+        <button class="message__action-btn message__action-btn--rate-down" title="Not helpful"><span class="material-symbols-outlined">thumb_down</span></button>
+        <button class="message__action-btn message__action-btn--copy" title="Copy"><span class="material-symbols-outlined">content_copy</span></button>
       </div>
       <div class="message__timestamp">${formatTime()}</div>
     </div>
   `;
-
-  const textEl = messageEl.querySelector('.message__text');
-  els.messagesContainer.appendChild(messageEl);
-  autoScroll(els);
-
-  return { messageEl, textEl };
+  els.messagesContainer.appendChild(el);
+  autoScroll();
+  return { messageEl: el, textEl: el.querySelector('.message__text') };
 }
 
-/* ── Bind action buttons on a bot message ── */
-function bindMessageActions(messageEl, plainText) {
-  const rateUpBtn   = messageEl.querySelector('.message__action-btn--rate-up');
-  const rateDownBtn = messageEl.querySelector('.message__action-btn--rate-down');
-  const ttsBtn      = messageEl.querySelector('.message__action-btn--tts');
-  const copyBtn     = messageEl.querySelector('.message__action-btn--copy');
+/**
+ * @description Binds rating and copy actions to a bot message
+ * @param {HTMLElement} el - Bot message container
+ * @param {string} text - Plain bot text
+ * @returns {void}
+ */
+function bindBotActions(el, text) {
+  el.querySelector('.message__action-btn--copy')?.addEventListener('click', (e) => {
+    navigator.clipboard.writeText(text);
+    e.currentTarget.innerHTML = '<span class="material-symbols-outlined">check</span>';
+    setTimeout(() => {
+      if (e.currentTarget) e.currentTarget.innerHTML = '<span class="material-symbols-outlined">content_copy</span>';
+    }, 2000);
+  });
 
-  // Rating
-  const handleRate = async (rating) => {
-    const msgId = await saveMessage('assistant', plainText).catch(() => null);
-    if (msgId) rateMessage(msgId, rating).catch(() => {});
-
-    // Replace rating buttons with feedback text
-    const actionsEl = messageEl.querySelector('.message__actions');
-    if (rateUpBtn) rateUpBtn.remove();
-    if (rateDownBtn) rateDownBtn.remove();
-
-    const feedbackEl = document.createElement('span');
-    feedbackEl.className = 'message__feedback';
-    feedbackEl.textContent = 'Thanks for your feedback!';
-    actionsEl?.prepend(feedbackEl);
+  const rate = async (val, btn) => {
+    const hist = await saveMessage('assistant', text);
+    if (hist.ok) rateMessage(hist.value, val);
+    btn.parentElement.innerHTML = '<span class="feedback-sent">Thank you!</span>';
   };
 
-  rateUpBtn?.addEventListener('click', () => handleRate(1), { once: true });
-  rateDownBtn?.addEventListener('click', () => handleRate(-1), { once: true });
-
-  // TTS
-  ttsBtn?.addEventListener('click', async () => {
-    const { speakText } = await import('./tts.js');
-    speakText(plainText);
-  });
-
-  // Copy
-  copyBtn?.addEventListener('click', () => {
-    navigator.clipboard.writeText(plainText);
-    copyBtn.innerHTML = '<span class="material-symbols-outlined" style="font-size:16px;">check</span>';
-    setTimeout(() => {
-      copyBtn.innerHTML = '<span class="material-symbols-outlined" style="font-size:16px;">content_copy</span>';
-    }, 1500);
-  });
+  el.querySelector('.message__action-btn--rate-up')?.addEventListener('click', (e) => rate(1, e.currentTarget));
+  el.querySelector('.message__action-btn--rate-down')?.addEventListener('click', (e) => rate(-1, e.currentTarget));
 }
 
-/* ═══════════════════════════════════════════════
-   TYPING INDICATOR
-   ═══════════════════════════════════════════════ */
+/* ─────────────────────────────────────────────
+   6. UI UTILITIES
+   ───────────────────────────────────────────── */
 
-function showTypingIndicator(els) {
-  const indicator = els.typingIndicator || $('#typing-indicator');
-  if (indicator) indicator.style.display = 'flex';
-  autoScroll(els);
+function showTypingIndicator() {
+  if (els.typingIndicator) els.typingIndicator.style.display = 'flex';
+  autoScroll();
 }
 
-function hideTypingIndicator(els) {
-  const indicator = els.typingIndicator || $('#typing-indicator');
-  if (indicator) indicator.style.display = 'none';
+function hideTypingIndicator() {
+  if (els.typingIndicator) els.typingIndicator.style.display = 'none';
 }
 
-/* ═══════════════════════════════════════════════
-   AUTO-SCROLL
-   ═══════════════════════════════════════════════ */
-
-function autoScroll(els) {
+function autoScroll() {
   if (userHasScrolledUp) return;
-  const container = els.messagesContainer;
-  if (container) {
-    container.scrollTo({ top: container.scrollHeight, behavior: 'smooth' });
-  }
+  els.messagesContainer?.scrollTo({ top: els.messagesContainer.scrollHeight, behavior: 'smooth' });
 }
-
-/* ═══════════════════════════════════════════════
-   HELPERS
-   ═══════════════════════════════════════════════ */
 
 function formatTime() {
   return new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
 }
 
-function updateTTSButtonState(els) {
+/**
+ * @description Syncs the TTS toggle button with the current global state
+ * @returns {Promise<void>}
+ */
+async function updateTTSButtonUI() {
   if (!els.ttsButton) return;
-  updateTTSUI(els.ttsButton);
-}
-
-async function updateTTSUI(btn) {
-  if (!btn) return;
   const { isTTSEnabled } = await import('./tts.js');
   const enabled = isTTSEnabled();
-  btn.classList.toggle('chat-header__btn--active', enabled);
-  btn.setAttribute('title', enabled ? 'TTS on (long-press to disable)' : 'TTS off (long-press to enable)');
-  const icon = btn.querySelector('.material-symbols-outlined');
+  els.ttsButton.classList.toggle('chat-header__btn--active', enabled);
+  const icon = els.ttsButton.querySelector('.material-symbols-outlined');
   if (icon) icon.textContent = enabled ? 'volume_up' : 'volume_off';
 }
 
@@ -537,29 +471,14 @@ function buildWelcomeHTML() {
   return `
     <div class="chat-welcome" id="chat-welcome">
       <div class="chat-welcome__illustration">
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="120" height="120" aria-hidden="true">
-          <defs>
-            <linearGradient id="boxGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-              <stop offset="0%" style="stop-color:#1a6fef;stop-opacity:0.9"/>
-              <stop offset="100%" style="stop-color:#6c3cef;stop-opacity:0.9"/>
-            </linearGradient>
-          </defs>
-          <rect x="40" y="70" width="120" height="100" rx="12" fill="url(#boxGrad)" opacity="0.85"/>
-          <rect x="70" y="65" width="60" height="8" rx="4" fill="#0d47a1"/>
-          <g class="chat-welcome__ballot">
-            <rect x="80" y="30" width="40" height="50" rx="4" fill="#fff" opacity="0.95"/>
-            <line x1="88" y1="45" x2="112" y2="45" stroke="#1a6fef" stroke-width="2" stroke-linecap="round"/>
-            <line x1="88" y1="52" x2="105" y2="52" stroke="#6c3cef" stroke-width="2" stroke-linecap="round"/>
-            <path d="M90 65 l3 3 l6-6" stroke="#22c55e" stroke-width="2" fill="none" stroke-linecap="round"/>
-          </g>
-          <ellipse cx="100" cy="180" rx="50" ry="6" fill="#000" opacity="0.08"/>
+        <svg viewBox="0 0 200 200" width="120" height="120">
+          <rect x="40" y="70" width="120" height="100" rx="12" fill="#1a56db" opacity="0.8"/>
+          <rect x="80" y="30" width="40" height="50" rx="4" fill="#fff"/>
         </svg>
       </div>
-      <h2 class="chat-welcome__title">Ask me anything about elections!</h2>
-      <p class="chat-welcome__subtitle">I'm your AI-powered guide to India's democratic process.</p>
+      <h2 class="chat-welcome__title">How can I help you today?</h2>
+      <p class="chat-welcome__subtitle">Expert guidance on India's election process.</p>
       <div class="chat-suggestions" id="chat-suggestions"></div>
     </div>
   `;
 }
-
-export { chatHistory };

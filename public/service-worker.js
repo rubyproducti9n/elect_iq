@@ -1,8 +1,9 @@
 /* ═══════════════════════════════════════════════
-   ElectIQ — Service Worker (Offline-first PWA)
+   ElectIQ — Service Worker
+   Enables offline capabilities and asset caching
    ═══════════════════════════════════════════════ */
 
-const CACHE_NAME = 'electiq-v1';
+const CACHE_NAME = 'electiq-v2.1';
 const STATIC_ASSETS = [
   '/',
   '/index.html',
@@ -16,7 +17,10 @@ const STATIC_ASSETS = [
   '/assets/data/election-knowledge.json',
 ];
 
-/* ── Install: pre-cache shell ── */
+/**
+ * @description Installation event: populates the cache with static assets
+ * @param {ExtendableEvent} event
+ */
 self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => cache.addAll(STATIC_ASSETS))
@@ -24,7 +28,10 @@ self.addEventListener('install', (event) => {
   self.skipWaiting();
 });
 
-/* ── Activate: purge old caches ── */
+/**
+ * @description Activation event: cleans up legacy caches
+ * @param {ExtendableEvent} event
+ */
 self.addEventListener('activate', (event) => {
   event.waitUntil(
     caches.keys().then((keys) =>
@@ -38,19 +45,20 @@ self.addEventListener('activate', (event) => {
   self.clients.claim();
 });
 
-/* ── Fetch: stale-while-revalidate for assets, network-first for API ── */
+/**
+ * @description Fetch event: implements stale-while-revalidate for assets
+ * @param {FetchEvent} event
+ */
 self.addEventListener('fetch', (event) => {
   const { request } = event;
   const url = new URL(request.url);
 
-  // Do not cache non-GET requests (e.g., POST)
   if (request.method !== 'GET') return;
 
-  // Network-first for API calls
+  // Network-first for API traffic
   if (
-    url.hostname.includes('generativelanguage.googleapis.com') ||
-    url.hostname.includes('firestore.googleapis.com') ||
-    url.hostname.includes('texttospeech.googleapis.com')
+    url.hostname.includes('googleapis.com') ||
+    url.hostname.includes('firebase.io')
   ) {
     event.respondWith(
       fetch(request).catch(() => caches.match(request))
@@ -58,18 +66,15 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Stale-while-revalidate for static assets
+  // Stale-while-revalidate for local assets
   event.respondWith(
     caches.open(CACHE_NAME).then((cache) =>
-      cache.match(request).then((cachedResponse) => {
-        const networkFetch = fetch(request)
-          .then((networkResponse) => {
-            cache.put(request, networkResponse.clone());
-            return networkResponse;
-          })
-          .catch(() => cachedResponse);
-
-        return cachedResponse || networkFetch;
+      cache.match(request).then((cached) => {
+        const network = fetch(request).then((res) => {
+          cache.put(request, res.clone());
+          return res;
+        }).catch(() => cached);
+        return cached || network;
       })
     )
   );

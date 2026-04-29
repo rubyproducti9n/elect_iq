@@ -1,122 +1,81 @@
 /* ═══════════════════════════════════════════════
-   ElectIQ — DOMPurify-Based Sanitizer
-   Input validation & output sanitization
+   ElectIQ — Sanitization Module
+   XSS prevention and Markdown-to-HTML conversion
    ═══════════════════════════════════════════════ */
 
+import { INPUT } from './constants.js';
+
 /**
- * Get the DOMPurify instance (loaded via CDN in index.html).
+ * @description Retrieves the DOMPurify instance from the global scope
+ * @returns {object|null}
  */
 function getPurify() {
-  if (typeof DOMPurify !== 'undefined') return DOMPurify;
-  console.warn('[Sanitize] DOMPurify not loaded. Falling back to basic escaping.');
-  return null;
+  return typeof DOMPurify !== 'undefined' ? DOMPurify : null;
 }
 
 /**
- * Basic HTML entity escaping fallback.
+ * @description Basic character escaping for environments without DOMPurify
+ * @param {string} str - Raw string
+ * @returns {string}
  */
 function escapeHtml(str) {
-  const map = {
-    '&': '&amp;',
-    '<': '&lt;',
-    '>': '&gt;',
-    '"': '&quot;',
-    "'": '&#039;',
-  };
-  return str.replace(/[&<>"']/g, (c) => map[c]);
+  return str.replace(/[&<>"']/g, (m) => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;'
+  })[m]);
 }
 
 /**
- * Sanitize user input before sending to API.
- * Strips HTML and trims whitespace.
- * @param {string} input
- * @returns {string}
+ * @description Sanitizes user input by stripping all HTML tags
+ * @param {string} input - Raw user input
+ * @returns {string} Sanitized text
+ * @throws {Error} If input exceeds length limits
  */
 export function sanitizeInput(input) {
   if (typeof input !== 'string') return '';
-
-  if (input.length > 500) {
-    throw new Error('Input exceeds maximum length of 500 characters.');
+  if (input.length > INPUT.MAX_CHARS) {
+    throw new Error(`Input exceeds limit of ${INPUT.MAX_CHARS} characters.`);
   }
 
   const purify = getPurify();
-  const cleaned = purify
-    ? purify.sanitize(input, { ALLOWED_TAGS: [], ALLOWED_ATTR: [] })
-    : escapeHtml(input);
-
-  return cleaned.trim();
+  const clean = purify ? purify.sanitize(input, { ALLOWED_TAGS: [], ALLOWED_ATTR: [] }) : escapeHtml(input);
+  return clean.trim();
 }
 
 /**
- * Sanitize AI output before rendering into DOM.
- * Allows safe formatting tags.
- * @param {string} output
- * @returns {string}
+ * @description Converts markdown to sanitized HTML for safe rendering
+ * @param {string} output - Raw AI output (Markdown)
+ * @returns {string} Sanitized HTML
  */
 export function sanitizeOutput(output) {
   if (typeof output !== 'string') return '';
 
-  // Parse Markdown to HTML if marked is available
-  let rawHtml = output;
+  let html = output;
   if (typeof marked !== 'undefined') {
     try {
-      rawHtml = marked.parse(output, { async: false, breaks: true });
+      html = marked.parse(output, { breaks: true });
     } catch (e) {
-      console.warn('[Sanitize] Markdown parsing failed:', e);
+      console.warn('[Sanitize] Markdown failed.');
     }
   }
 
   const purify = getPurify();
   if (purify) {
-    const cleanHtml = purify.sanitize(rawHtml, {
-      ALLOWED_TAGS: [
-        'b', 'i', 'em', 'strong', 'p', 'br', 'ul', 'ol', 'li',
-        'h1', 'h2', 'h3', 'h4', 'code', 'pre', 'blockquote', 'a', 'span',
-      ],
-      ALLOWED_ATTR: ['href', 'target', 'rel', 'class'],
+    return purify.sanitize(html, {
+      ALLOWED_TAGS: ['b', 'i', 'em', 'strong', 'p', 'br', 'ul', 'ol', 'li', 'h3', 'code', 'pre', 'a'],
+      ALLOWED_ATTR: ['href', 'target', 'rel'],
       ADD_ATTR: ['target'],
-      FORBID_TAGS: ['script', 'style', 'iframe', 'object', 'embed', 'form'],
-      FORBID_ATTR: ['onerror', 'onload', 'onclick', 'onmouseover'],
+      FORBID_TAGS: ['script', 'style', 'iframe', 'form'],
     });
-    
-    // Add target="_blank" securely to all links post-sanitization
-    if (typeof document !== 'undefined') {
-      const tempDiv = document.createElement('div');
-      tempDiv.innerHTML = cleanHtml;
-      tempDiv.querySelectorAll('a').forEach(a => {
-        a.setAttribute('target', '_blank');
-        a.setAttribute('rel', 'noopener noreferrer');
-      });
-      return tempDiv.innerHTML;
-    }
-    return cleanHtml;
   }
 
   return escapeHtml(output);
 }
 
 /**
- * Validate an email address format.
- * @param {string} email
+ * @description Validates if a string follows email format standards
+ * @param {string} email - Input string
  * @returns {boolean}
  */
 export function isValidEmail(email) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
-}
-
-/**
- * Strip potential XSS from URL strings.
- * @param {string} url
- * @returns {string|null}
- */
-export function sanitizeUrl(url) {
-  try {
-    const parsed = new URL(url);
-    if (['http:', 'https:'].includes(parsed.protocol)) {
-      return parsed.href;
-    }
-    return null;
-  } catch {
-    return null;
-  }
 }

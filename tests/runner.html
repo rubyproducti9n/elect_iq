@@ -2,91 +2,355 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>ElectIQ Test Suite</title>
-  <link href="https://unpkg.com/mocha@10.2.0/mocha.css" rel="stylesheet" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ElectIQ Test Runner — Vitest Dashboard</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🧪</text></svg>">
+  
+  <!-- Material Symbols & Fonts -->
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono&family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20,400,0,0" />
+  
+  <!-- Axe-core for a11y testing -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/axe-core/4.8.2/axe.min.js"></script>
+  
   <style>
-    body { font-family: system-ui, sans-serif; background: #1e1e20; color: #fff; margin: 0; padding: 20px; }
-    #mocha { margin: 20px 0; }
-    #coverage-summary { background: #2a2a2d; padding: 15px; border-radius: 8px; margin-top: 20px; }
-    .pass { color: #34d399; }
-    .fail { color: #f87171; }
-    #mock-dom-container { display: none; }
+    :root {
+      --clr-bg: #f8fafc;
+      --clr-surface: #ffffff;
+      --clr-primary: #1a56db;
+      --clr-success: #10b981;
+      --clr-error: #ef4444;
+      --clr-text: #1e293b;
+      --clr-text-muted: #64748b;
+      --clr-border: #e2e8f0;
+      --ff-sans: 'Inter', system-ui, -apple-system, sans-serif;
+      --ff-mono: 'JetBrains Mono', monospace;
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { background: var(--clr-bg); color: var(--clr-text); font-family: var(--ff-sans); line-height: 1.5; padding: 2rem; }
+
+    .container { max-width: 900px; margin: 0 auto; }
+
+    header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 2rem; }
+    .title-group h1 { font-size: 1.5rem; font-weight: 700; color: var(--clr-text); }
+    .title-group p { font-size: 0.875rem; color: var(--clr-text-muted); }
+
+    .stats-bar {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 1rem;
+      margin-bottom: 2rem;
+    }
+
+    .stat-card {
+      background: var(--clr-surface);
+      padding: 1.25rem;
+      border-radius: 12px;
+      border: 1.5px solid var(--clr-border);
+      text-align: center;
+    }
+
+    .stat-card__value { font-size: 1.5rem; font-weight: 700; display: block; }
+    .stat-card__label { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--clr-text-muted); }
+
+    .stat-card--pass .stat-card__value { color: var(--clr-success); }
+    .stat-card--fail .stat-card__value { color: var(--clr-error); }
+
+    .banner {
+      display: none;
+      background: var(--clr-success);
+      color: white;
+      padding: 1rem;
+      border-radius: 12px;
+      text-align: center;
+      font-weight: 600;
+      margin-bottom: 2rem;
+      animation: slideDown 0.4s ease-out;
+    }
+
+    @keyframes slideDown {
+      from { transform: translateY(-10px); opacity: 0; }
+      to { transform: translateY(0); opacity: 1; }
+    }
+
+    .file-row {
+      background: var(--clr-surface);
+      border-radius: 12px;
+      border: 1.5px solid var(--clr-border);
+      margin-bottom: 1rem;
+      overflow: hidden;
+    }
+
+    .file-header {
+      padding: 1rem;
+      background: rgba(0,0,0,0.02);
+      border-bottom: 1px solid var(--clr-border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .file-name { font-weight: 600; font-family: var(--ff-mono); font-size: 0.875rem; }
+    .file-time { font-size: 0.75rem; color: var(--clr-text-muted); }
+
+    .test-list { padding: 0.5rem 0; }
+    .test-item {
+      padding: 0.75rem 1rem;
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      font-size: 0.875rem;
+      border-bottom: 1px solid rgba(0,0,0,0.03);
+    }
+    .test-item:last-child { border-bottom: none; }
+
+    .test-status { font-size: 1.25rem; flex-shrink: 0; }
+    .test-status--pass { color: var(--clr-success); }
+    .test-status--fail { color: var(--clr-error); }
+
+    .test-error {
+      margin-top: 0.5rem;
+      padding: 0.75rem;
+      background: #fff5f5;
+      color: var(--clr-error);
+      border-radius: 6px;
+      font-family: var(--ff-mono);
+      font-size: 0.75rem;
+      white-space: pre-wrap;
+      width: 100%;
+    }
+
+    .controls { display: flex; gap: 1rem; }
+    button {
+      padding: 0.6rem 1.25rem;
+      border-radius: 8px;
+      border: none;
+      background: var(--clr-primary);
+      color: white;
+      font-weight: 600;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      transition: opacity 0.2s;
+    }
+    button:hover { opacity: 0.9; }
+
+    #test-env { display: none; }
   </style>
 </head>
 <body>
-  <h1>ElectIQ Test Suite</h1>
-  
-  <div id="coverage-summary">
-    <h3>Coverage Summary</h3>
-    <p>Running tests...</p>
+
+  <div class="container">
+    <header>
+      <div class="title-group">
+        <h1>ElectIQ Test Suite</h1>
+        <p>Vitest-compatible Browser Runner</p>
+      </div>
+      <div class="controls">
+        <button onclick="location.reload()">
+          <span class="material-symbols-outlined">refresh</span>
+          Re-run All Tests
+        </button>
+      </div>
+    </header>
+
+    <div id="success-banner" class="banner">
+      🎉 All tests passing! ElectIQ is ready for deployment.
+    </div>
+
+    <div class="stats-bar">
+      <div class="stat-card">
+        <span id="stat-total" class="stat-card__value">0</span>
+        <span class="stat-card__label">Total Tests</span>
+      </div>
+      <div class="stat-card stat-card--pass">
+        <span id="stat-passed" class="stat-card__value">0</span>
+        <span class="stat-card__label">Passed</span>
+      </div>
+      <div class="stat-card stat-card--fail">
+        <span id="stat-failed" class="stat-card__value">0</span>
+        <span class="stat-card__label">Failed</span>
+      </div>
+      <div class="stat-card">
+        <span id="stat-percent" class="stat-card__value">0%</span>
+        <span class="stat-card__label">Pass Rate</span>
+      </div>
+    </div>
+
+    <div id="results-container">
+      <!-- Test results will be injected here -->
+    </div>
   </div>
 
-  <div id="mocha"></div>
-  
-  <!-- Hidden container for UI tests -->
-  <div id="mock-dom-container"></div>
-
-  <!-- Dependencies -->
-  <script src="https://unpkg.com/mocha@10.2.0/mocha.js"></script>
-  <script src="https://unpkg.com/chai@4.3.7/chai.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/axe-core/4.7.0/axe.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.1.6/purify.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/marked/12.0.1/marked.min.js"></script>
-
-  <script>
-    // Setup Mocha to BDD interface (describe, it)
-    mocha.setup('bdd');
-    window.expect = chai.expect;
-
-    // Vitest mock polyfills for browser
-    window.vi = {
-      fn: () => {
-        const mock = function(...args) {
-          mock.calls.push(args);
-          return mock.mockReturnValue;
-        };
-        mock.calls = [];
-        mock.mockReturnValue = undefined;
-        mock.mockReturnValueOnce = (val) => { mock.mockReturnValue = val; return mock; };
-        mock.mockResolvedValue = (val) => { mock.mockReturnValue = Promise.resolve(val); return mock; };
-        return mock;
-      },
-      restoreAllMocks: () => {}
-    };
-  </script>
+  <!-- Hidden div to mount components for testing -->
+  <div id="test-env"></div>
 
   <script type="module">
-    // Mock Config before importing modules
-    window.Config = {
-      GEMINI_API_KEY: 'test-key',
-      GEMINI_ENDPOINT: 'https://generativelanguage.googleapis.com/v1beta/models',
-      GEMINI_MODEL: 'gemini-1.5-flash'
+    /* ── Vitest Global Shim ── */
+    const results = [];
+    let currentFile = '';
+    let currentDescribe = '';
+    let stats = { total: 0, passed: 0, failed: 0 };
+
+    window.vi = {
+      fn: (impl) => {
+        const fn = (...args) => {
+          fn.mock.calls.push(args);
+          return fn.impl ? fn.impl(...args) : (impl ? impl(...args) : undefined);
+        };
+        fn.mock = { calls: [] };
+        fn.mockResolvedValue = (val) => { fn.impl = () => Promise.resolve(val); return fn; };
+        fn.mockReturnValue = (val) => { fn.impl = () => val; return fn; };
+        fn.clearAllMocks = () => { fn.mock.calls = []; };
+        return fn;
+      },
+      clearAllMocks: () => {
+        Object.keys(window).forEach(key => {
+          if (window[key]?.mock) window[key].mock.calls = [];
+        });
+      }
     };
 
-    // Load Tests
-    import '../tests/sanitize.test.js';
-    import '../tests/gemini.test.js';
-    import '../tests/timeline.test.js';
-    import '../tests/chat.test.js';
-    import '../tests/a11y.test.js';
+    window.describe = (name, fn) => {
+      currentDescribe = name;
+      fn();
+    };
 
-    // Run tests
-    mocha.run((failures) => {
-      const total = document.querySelectorAll('.test').length;
-      const passed = document.querySelectorAll('.test.pass').length;
-      const failed = document.querySelectorAll('.test.fail').length;
+    window.it = async (name, fn) => {
+      const testId = stats.total++;
+      const file = currentFile;
+      const describe = currentDescribe;
+      const start = performance.now();
       
-      const summary = document.getElementById('coverage-summary');
-      summary.innerHTML = `
-        <h3>Coverage Summary</h3>
-        <p><strong>Total Tests:</strong> ${total}</p>
-        <p class="pass"><strong>Passed:</strong> ${passed}</p>
-        <p class="${failed > 0 ? 'fail' : ''}"><strong>Failed:</strong> ${failed}</p>
-        <div style="width:100%;background:#444;height:10px;border-radius:5px;overflow:hidden;margin-top:10px;">
-          <div style="width:${total === 0 ? 0 : (passed/total)*100}%;background:#34d399;height:100%;"></div>
-        </div>
-      `;
+      try {
+        await fn();
+        stats.passed++;
+        reportTest(file, describe, name, true, null, performance.now() - start);
+      } catch (err) {
+        stats.failed++;
+        reportTest(file, describe, name, false, err.message, performance.now() - start);
+      }
+      updateStats();
+    };
+
+    window.expect = (actual) => ({
+      toBe: (expected) => { if (actual !== expected) throw new Error(`Expected ${expected} but got ${actual}`); },
+      toEqual: (expected) => { if (JSON.stringify(actual) !== JSON.stringify(expected)) throw new Error(`Expected ${JSON.stringify(expected)} but got ${JSON.stringify(actual)}`); },
+      toContain: (expected) => { if (!actual?.includes(expected)) throw new Error(`Expected ${actual} to contain ${expected}`); },
+      toContainEqual: (expected) => { if (!actual.some(i => JSON.stringify(i) === JSON.stringify(expected))) throw new Error(`Expected array to contain ${JSON.stringify(expected)}`); },
+      not: {
+        toContain: (expected) => { if (actual?.includes(expected)) throw new Error(`Expected ${actual} NOT to contain ${expected}`); },
+        toBeNull: () => { if (actual === null) throw new Error(`Expected value NOT to be null`); }
+      },
+      toBeNull: () => { if (actual !== null) throw new Error(`Expected null but got ${actual}`); },
+      toBeTruthy: () => { if (!actual) throw new Error(`Expected truthy value`); },
+      toBeGreaterThan: (expected) => { if (actual <= expected) throw new Error(`Expected ${actual} to be > ${expected}`); },
+      toThrow: () => {
+        let threw = false;
+        try { actual(); } catch(e) { threw = true; }
+        if (!threw) throw new Error("Expected function to throw error");
+      },
+      rejects: {
+        toThrow: async () => {
+          let threw = false;
+          try { await actual; } catch(e) { threw = true; }
+          if (!threw) throw new Error("Expected promise to reject");
+        }
+      }
     });
+
+    window.beforeEach = (fn) => {
+       // Simple implementation: override it to run fn first
+       const oldIt = window.it;
+       window.it = async (name, testFn) => {
+         await oldIt(name, async () => {
+           await fn();
+           await testFn();
+         });
+       };
+    };
+
+    // Helper to render results
+    function reportTest(file, describe, name, passed, error, duration) {
+      let fileDiv = document.querySelector(`[data-file="${file}"]`);
+      if (!fileDiv) {
+        fileDiv = document.createElement('div');
+        fileDiv.className = 'file-row';
+        fileDiv.setAttribute('data-file', file);
+        fileDiv.innerHTML = `
+          <div class="file-header">
+            <span class="file-name">${file}</span>
+            <span class="file-time"></span>
+          </div>
+          <div class="test-list"></div>
+        `;
+        document.getElementById('results-container').appendChild(fileDiv);
+      }
+
+      const list = fileDiv.querySelector('.test-list');
+      const item = document.createElement('div');
+      item.className = 'test-item';
+      item.innerHTML = `
+        <span class="test-status ${passed ? 'test-status--pass' : 'test-status--fail'} material-symbols-outlined">
+          ${passed ? 'check_circle' : 'cancel'}
+        </span>
+        <div style="flex:1">
+          <div style="font-weight:500">${describe} > ${name}</div>
+          ${!passed ? `<div class="test-error">${error}</div>` : ''}
+        </div>
+        <div style="font-size:0.7rem; color:var(--clr-text-muted)">${duration.toFixed(1)}ms</div>
+      `;
+      list.appendChild(item);
+    }
+
+    function updateStats() {
+      document.getElementById('stat-total').textContent = stats.total;
+      document.getElementById('stat-passed').textContent = stats.passed;
+      document.getElementById('stat-failed').textContent = stats.failed;
+      const rate = stats.total > 0 ? Math.round((stats.passed / stats.total) * 100) : 0;
+      document.getElementById('stat-percent').textContent = rate + '%';
+      
+      if (stats.total > 0 && stats.passed === stats.total) {
+        document.getElementById('success-banner').style.display = 'block';
+      }
+    }
+
+    /* ── Run Test Files ── */
+    async function runSuite() {
+      const files = [
+        'unit/sanitize.test.js',
+        'unit/gemini.test.js',
+        'unit/nlp.test.js',
+        'unit/remoteConfig.test.js',
+        'unit/timeline.test.js',
+        'unit/chat.test.js',
+        'unit/community.test.js',
+        'integration/firebase.test.js',
+        'a11y/accessibility.test.js'
+      ];
+
+      for (const file of files) {
+        currentFile = file;
+        // Reset beforeEach for each file
+        const originalIt = window.it;
+        try {
+          const start = performance.now();
+          await import(`./${file}`);
+          const end = performance.now();
+          const fileDiv = document.querySelector(`[data-file="${file}"]`);
+          if (fileDiv) {
+            fileDiv.querySelector('.file-time').textContent = `${(end - start).toFixed(1)}ms`;
+          }
+        } catch (err) {
+          console.error(`Error loading test file ${file}:`, err);
+        }
+        // Restore it after file
+        window.it = originalIt;
+      }
+    }
+
+    runSuite();
   </script>
 </body>
 </html>

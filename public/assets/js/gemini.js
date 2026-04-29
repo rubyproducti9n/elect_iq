@@ -1,26 +1,51 @@
 /* ═══════════════════════════════════════════════
-   ElectIQ — Gemini API Wrapper (v2)
-   ─────────────────────────────────────────────
-   • Dynamic system prompt with knowledge-base injection
-   • Token-bucket rate limiting (10 RPM)
-   • Exponential backoff retry (429 / 5xx)
-   • Streaming via SSE (askGeminiStream)
-   • Suggested-question parsing
-   • Structured error objects — never naked throws
+   ElectIQ — Gemini API Module
+   Handles AI generation, news retrieval, and doc decoding
    ═══════════════════════════════════════════════ */
 
 import Config from './config.js';
 import { getKnowledge, buildKnowledgeContext } from './dataLoader.js';
+import { serviceStatus } from './serviceStatus.js';
+import { ok, fail, timed } from './utils.js';
+import { RATE_LIMIT, GEMINI, STORAGE_KEYS, ERROR_CODES } from './constants.js';
+
+/* ── Module State ── */
+let knowledgeContext = '';
+const memoCache = new Map();
+
+/**
+ * @description Lazy-loaded configuration getter (overridden by main.js)
+ * @returns {{ geminiMaxTokens: number }}
+ */
+let _getConfig = () => ({ geminiMaxTokens: GEMINI.MAX_TOKENS });
+
+/**
+ * @description Injects a config getter function into the module
+ * @param {Function} fn - Function that returns the current config
+ * @returns {void}
+ */
+export function setConfigGetter(fn) { 
+  _getConfig = fn; 
+}
 
 /* ─────────────────────────────────────────────
-   1. TOKEN-BUCKET RATE LIMITER  (10 req / 60 s)
+   1. TOKEN-BUCKET RATE LIMITER
    ───────────────────────────────────────────── */
+
+/**
+ * @description Manages API request limits using a sliding window in sessionStorage
+ * @class SessionRateLimiter
+ */
 class SessionRateLimiter {
-  constructor(maxTokens = 10, windowMs = 60_000) {
+  constructor(maxTokens = RATE_LIMIT.MAX_REQUESTS, windowMs = RATE_LIMIT.WINDOW_MS) {
     this.max = maxTokens;
     this.windowMs = windowMs;
   }
 
+  /**
+   * @description Retrieves stored request timestamps
+   * @returns {number[]} Array of timestamps
+   */
   getTimestamps() {
     try {
       const stored = sessionStorage.getItem('electiq_api_timestamps');
@@ -30,21 +55,30 @@ class SessionRateLimiter {
     }
   }
 
+  /**
+   * @description Persists request timestamps
+   * @param {number[]} timestamps - Array of timestamps
+   * @returns {void}
+   */
   saveTimestamps(timestamps) {
     try {
       sessionStorage.setItem('electiq_api_timestamps', JSON.stringify(timestamps));
     } catch {}
   }
 
+  /**
+   * @description Attempts to consume a token from the bucket
+   * @returns {boolean} True if request is allowed
+   */
   tryConsume() {
     const now = Date.now();
     let timestamps = this.getTimestamps();
     
-    // Prune old timestamps
+    // Prune timestamps older than the window to free up tokens
     timestamps = timestamps.filter(t => now - t < this.windowMs);
     
     if (timestamps.length >= this.max) {
-      this.saveTimestamps(timestamps); // save pruned
+      this.saveTimestamps(timestamps);
       return false;
     }
     
@@ -53,6 +87,10 @@ class SessionRateLimiter {
     return true;
   }
 
+  /**
+   * @description Calculates seconds remaining until a token becomes available
+   * @returns {number} Wait time in seconds
+   */
   waitSeconds() {
     const now = Date.now();
     let timestamps = this.getTimestamps();
@@ -64,30 +102,50 @@ class SessionRateLimiter {
     const waitMs = this.windowMs - (now - oldest);
     return Math.ceil(waitMs / 1000);
   }
+
+  /**
+   * @description Resets the rate limiter for testing purposes
+   * @returns {void}
+   */
+  reset() {
+    sessionStorage.removeItem('electiq_api_timestamps');
+  }
 }
 
-const rateLimiter = new SessionRateLimiter(10, 60_000);
+const rateLimiter = new SessionRateLimiter();
 
 /* ─────────────────────────────────────────────
    2. KNOWLEDGE-BASE LOADER
    ───────────────────────────────────────────── */
-let knowledgeContext = '';
 
 /**
- * Pre-load the knowledge base so it is ready for the first chat message.
- * Called once from main.js at DOMContentLoaded.
+ * @description Loads and processes the election knowledge base into a context string
+ * @returns {Promise<Result<string>>} The processed context or failure
  */
 export async function loadKnowledgeBase() {
-  const kb = await getKnowledge();
-  if (kb) {
-    knowledgeContext = buildKnowledgeContext(kb);
-    console.info(`[Gemini] Knowledge base loaded (${knowledgeContext.length} chars)`);
-  }
+  return await timed("knowledge_base_load", async () => {
+    // Check sessionStorage cache first to prevent redundant network calls
+    const cached = sessionStorage.getItem(STORAGE_KEYS.KNOWLEDGE_BASE);
+    if (cached) {
+      knowledgeContext = cached;
+      return ok(knowledgeContext);
+    }
+
+    const kbRes = await getKnowledge();
+    if (kbRes.ok) {
+      knowledgeContext = buildKnowledgeContext(kbRes.value);
+      sessionStorage.setItem(STORAGE_KEYS.KNOWLEDGE_BASE, knowledgeContext);
+      console.info(`[Gemini] Knowledge base loaded (${knowledgeContext.length} chars)`);
+      return ok(knowledgeContext);
+    }
+    return fail(ERROR_CODES.NOT_FOUND, "Could not load knowledge base.");
+  });
 }
 
 /* ─────────────────────────────────────────────
-   3. SYSTEM PROMPT (built dynamically)
+   3. SYSTEM PROMPT
    ───────────────────────────────────────────── */
+
 const BASE_SYSTEM_PROMPT = `You are ElectIQ, an expert election literacy assistant for India.
 You only answer questions about elections, voting, candidates, ECI rules,
 and democratic processes. For off-topic queries, politely redirect.
@@ -98,6 +156,10 @@ if applicable, then a follow-up suggestion question. Keep answers under
 End every response with exactly 3 follow-up questions formatted as:
 SUGGESTIONS: [q1] | [q2] | [q3]`;
 
+/**
+ * @description Builds the final system prompt including injected knowledge context
+ * @returns {string} The complete system prompt
+ */
 function getSystemPrompt() {
   if (!knowledgeContext) return BASE_SYSTEM_PROMPT;
   return `${BASE_SYSTEM_PROMPT}\n\nUse the following verified reference data to ground your answers:\n\n${knowledgeContext}`;
@@ -106,11 +168,11 @@ function getSystemPrompt() {
 /* ─────────────────────────────────────────────
    4. SUGGESTION PARSER
    ───────────────────────────────────────────── */
+
 /**
- * Splits the raw Gemini text into the visible answer and
- * an array of follow-up questions (max 3).
- * @param {string} raw - Raw model output
- * @returns {{ text: string, suggestedQuestions: string[] }}
+ * @description Extracts suggested follow-up questions from model output
+ * @param {string} raw - The raw text from Gemini
+ * @returns {{ text: string, suggestedQuestions: string[] }} Parsed content
  */
 function parseSuggestions(raw) {
   const match = raw.match(/SUGGESTIONS:\s*\[([^\]]+)\]\s*\|\s*\[([^\]]+)\]\s*\|\s*\[([^\]]+)\]/i);
@@ -120,7 +182,6 @@ function parseSuggestions(raw) {
     return { text, suggestedQuestions };
   }
 
-  // Fallback: try pipe-only format  "SUGGESTIONS: q1 | q2 | q3"
   const fallback = raw.match(/SUGGESTIONS:\s*(.+)/i);
   if (fallback) {
     const text = raw.slice(0, fallback.index).trim();
@@ -132,51 +193,52 @@ function parseSuggestions(raw) {
 }
 
 /* ─────────────────────────────────────────────
-   5. EXPONENTIAL BACKOFF RETRY (429 / 5xx)
+   5. FETCH WITH RETRY
    ───────────────────────────────────────────── */
-async function fetchWithRetry(url, options, maxRetries = 3) {
+
+/**
+ * @description Performs a fetch with exponential backoff for retryable errors
+ * @param {string} url - Target URL
+ * @param {object} options - Fetch options
+ * @param {number} [maxRetries] - Max number of attempts (default: 3)
+ * @returns {Promise<Result<Response>>} The response or failure
+ */
+async function fetchWithRetry(url, options, maxRetries = RATE_LIMIT.RETRY_ATTEMPTS) {
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     try {
       const response = await fetch(url, options);
 
-      // Retryable status codes: 429 (rate limit) and 5xx (server errors)
+      // Retry on rate limit (429) or server errors (5xx)
       if ((response.status === 429 || response.status >= 500) && attempt < maxRetries) {
         const jitter = Math.random() * 500;
-        const waitMs = Math.min(1000 * Math.pow(2, attempt), 16_000) + jitter;
-        console.warn(`[Gemini] ${response.status} — retrying in ${Math.round(waitMs)}ms (attempt ${attempt + 1}/${maxRetries})`);
+        const waitMs = Math.min(RATE_LIMIT.RETRY_BASE_DELAY_MS * Math.pow(2, attempt), 16_000) + jitter;
+        console.warn(`[Gemini] ${response.status} — retrying in ${Math.round(waitMs)}ms (${attempt + 1}/${maxRetries})`);
         await new Promise((r) => setTimeout(r, waitMs));
         continue;
       }
 
       if (!response.ok) {
-        const errorBody = await response.text();
-        return {
-          error: true,
-          message: `Gemini API error ${response.status}: ${errorBody.slice(0, 200)}`,
-          code: response.status,
-        };
+        return fail(`${ERROR_CODES.HTTP}_${response.status}`, `API error: ${response.status}`);
       }
 
-      return response;
-    } catch (networkError) {
-      if (attempt === maxRetries) {
-        return {
-          error: true,
-          message: `Network error: ${networkError.message}. Check your connection.`,
-          code: 0,
-        };
-      }
-      const jitter = Math.random() * 500;
-      const waitMs = Math.min(500 * Math.pow(2, attempt), 8_000) + jitter;
-      console.warn(`[Gemini] Network error — retrying in ${Math.round(waitMs)}ms`);
-      await new Promise((r) => setTimeout(r, waitMs));
+      return ok(response);
+    } catch (err) {
+      if (attempt === maxRetries) return fail(ERROR_CODES.NETWORK, "Network connection failure.");
+      await new Promise((r) => setTimeout(r, RATE_LIMIT.RETRY_BASE_DELAY_MS * Math.pow(2, attempt)));
     }
   }
 }
 
 /* ─────────────────────────────────────────────
-   6. BUILD CONTENTS ARRAY
+   6. REQUEST BUILDERS
    ───────────────────────────────────────────── */
+
+/**
+ * @description Builds the contents array for the Gemini API
+ * @param {string} userMessage - The current user input
+ * @param {Array} history - Previous messages [{role, content}]
+ * @returns {Array} Formatted contents array
+ */
 function buildContents(userMessage, history = []) {
   const contents = history.map((msg) => ({
     role: msg.role === 'user' ? 'user' : 'model',
@@ -186,124 +248,119 @@ function buildContents(userMessage, history = []) {
   return contents;
 }
 
-function buildRequestBody(contents) {
+/**
+ * @description Constructs the full request body for Gemini
+ * @param {Array} contents - The contents array
+ * @param {string} [extraSystemPrefix] - Optional sentiment-based instructions
+ * @returns {object} The request payload
+ */
+function buildRequestBody(contents, extraSystemPrefix = '') {
+  const cfg = _getConfig();
+  const systemText = extraSystemPrefix
+    ? `${extraSystemPrefix}\n\n${getSystemPrompt()}`
+    : getSystemPrompt();
+    
   return {
-    system_instruction: {
-      parts: [{ text: getSystemPrompt() }],
-    },
+    system_instruction: { parts: [{ text: systemText }] },
     contents,
     generationConfig: {
       temperature: 0.7,
       topP: 0.9,
       topK: 40,
-      maxOutputTokens: 1024,
+      maxOutputTokens: cfg.geminiMaxTokens,
     },
+    tools: [{ googleSearch: {} }],
+    toolConfig: { functionCallingConfig: { mode: 'AUTO' } },
     safetySettings: [
-      { category: 'HARM_CATEGORY_HARASSMENT',        threshold: 'BLOCK_MEDIUM_AND_ABOVE' },
-      { category: 'HARM_CATEGORY_HATE_SPEECH',       threshold: 'BLOCK_MEDIUM_AND_ABOVE' },
-      { category: 'HARM_CATEGORY_SEXUALLY_EXPLICIT',  threshold: 'BLOCK_MEDIUM_AND_ABOVE' },
-      { category: 'HARM_CATEGORY_DANGEROUS_CONTENT',  threshold: 'BLOCK_MEDIUM_AND_ABOVE' },
+      { category: 'HARM_CATEGORY_HARASSMENT', threshold: 'BLOCK_MEDIUM_AND_ABOVE' },
+      { category: 'HARM_CATEGORY_HATE_SPEECH', threshold: 'BLOCK_MEDIUM_AND_ABOVE' },
+      { category: 'HARM_CATEGORY_SEXUALLY_EXPLICIT', threshold: 'BLOCK_MEDIUM_AND_ABOVE' },
+      { category: 'HARM_CATEGORY_DANGEROUS_CONTENT', threshold: 'BLOCK_MEDIUM_AND_ABOVE' },
     ],
   };
 }
 
 /* ─────────────────────────────────────────────
-   7. askGemini  (standard, non-streaming)
-   Returns { text, suggestedQuestions } or
-           { error, message, code }
+   7. EXPORTED API FUNCTIONS
    ───────────────────────────────────────────── */
+
 /**
- * Send a message to Gemini and get a complete response.
- * @param {string} userMessage
- * @param {Array}  history  [{role, content}, …]
- * @returns {Promise<{text: string, suggestedQuestions: string[]} | {error: true, message: string, code: number}>}
+ * @description Sends a non-streaming request to Gemini
+ * @param {string} userMessage - User input
+ * @param {Array} [history] - Conversation history
+ * @param {object} [options] - Sentiment prefixes, etc.
+ * @returns {Promise<Result<{text: string, suggestedQuestions: string[]}>>} The response or failure
+ * @fires Analytics#gemini_response
  */
-export async function askGemini(userMessage, history = []) {
-  /* ── Pre-flight checks ── */
-  if (!Config.GEMINI_API_KEY) {
-    return { error: true, message: 'Gemini API key not configured. Check <meta> tags.', code: 401 };
-  }
+export async function askGemini(userMessage, history = [], options = {}) {
+  return await timed("gemini_response", async () => {
+    // 1. Pre-flight checks
+    if (!Config.GEMINI_API_KEY) return fail(ERROR_CODES.AUTH, "API key not configured.");
+    
+    // 2. Memoization Cache
+    const cacheKey = `${userMessage.trim().toLowerCase()}_${history.length}`;
+    if (memoCache.has(cacheKey)) return ok(memoCache.get(cacheKey));
 
-  if (!rateLimiter.tryConsume()) {
-    const wait = rateLimiter.waitSeconds();
-    return {
-      error: true,
-      message: `You're sending messages too quickly. Please wait ${wait} second${wait !== 1 ? 's' : ''} before trying again.`,
-      code: 429,
-    };
-  }
-
-  /* ── Build request ── */
-  const contents = buildContents(userMessage, history);
-  const url = `${Config.GEMINI_ENDPOINT}/${Config.GEMINI_MODEL}:generateContent`;
-
-  const result = await fetchWithRetry(url, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-goog-api-key': Config.GEMINI_API_KEY,
-    },
-    body: JSON.stringify(buildRequestBody(contents)),
-  });
-
-  /* ── fetchWithRetry returned a structured error ── */
-  if (result?.error) return result;
-
-  /* ── Parse success response ── */
-  try {
-    const data = await result.json();
-    const raw  = data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
-
-    if (!raw) {
-      // Check for a safety block
-      const blockReason = data?.candidates?.[0]?.finishReason;
-      if (blockReason === 'SAFETY') {
-        return { error: true, message: 'Response blocked by safety filters. Please rephrase your question.', code: 400 };
-      }
-      return { error: true, message: 'Gemini returned an empty response. Please try again.', code: 204 };
+    // 3. Rate Limiting
+    if (!rateLimiter.tryConsume()) {
+      return fail(ERROR_CODES.RATE_LIMIT, "Too many requests.", rateLimiter.waitSeconds() * 1000);
     }
 
-    return parseSuggestions(raw);
-  } catch (parseError) {
-    return { error: true, message: `Failed to parse Gemini response: ${parseError.message}`, code: 500 };
-  }
+    const contents = buildContents(userMessage, history);
+    const url = `${GEMINI.ENDPOINT}/${GEMINI.MODEL}:generateContent`;
+
+    const res = await fetchWithRetry(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-goog-api-key': Config.GEMINI_API_KEY,
+      },
+      body: JSON.stringify(buildRequestBody(contents, options?.sentimentPrefix || '')),
+    });
+
+    if (!res.ok) return res;
+
+    try {
+      const data = await res.value.json();
+      const raw = data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
+
+      if (!raw) {
+        const finishReason = data?.candidates?.[0]?.finishReason;
+        return fail(ERROR_CODES.HTTP, finishReason === 'SAFETY' ? "Blocked by safety filters." : "Empty response.");
+      }
+
+      serviceStatus.update('gemini', true);
+      const parsed = parseSuggestions(raw);
+      
+      // Store in memo cache
+      memoCache.set(cacheKey, parsed);
+      return ok(parsed);
+    } catch (e) {
+      serviceStatus.update('gemini', false);
+      return fail(ERROR_CODES.HTTP, "Failed to parse API response.");
+    }
+  });
 }
 
-/* ─────────────────────────────────────────────
-   8. askGeminiStream  (SSE streaming)
-   Calls onChunk(text) for each streamed token.
-   Returns { suggestedQuestions } or
-           { error, message, code }
-   ───────────────────────────────────────────── */
 /**
- * Stream a Gemini response token-by-token.
- * @param {string}   userMessage
- * @param {Array}    history
- * @param {Function} onChunk - Called with each text delta
- * @returns {Promise<{suggestedQuestions: string[]} | {error: true, message: string, code: number}>}
+ * @description Sends a streaming request to Gemini via SSE
+ * @param {string} userMessage - User input
+ * @param {Array} [history] - Conversation history
+ * @param {Function} onChunk - Callback for each text delta
+ * @returns {Promise<Result<{suggestedQuestions: string[]}>>} The final metadata or failure
  */
 export async function askGeminiStream(userMessage, history = [], onChunk) {
-  /* ── Pre-flight checks ── */
-  if (!Config.GEMINI_API_KEY) {
-    return { error: true, message: 'Gemini API key not configured. Check <meta> tags.', code: 401 };
-  }
-
+  if (!Config.GEMINI_API_KEY) return fail(ERROR_CODES.AUTH, "API key not configured.");
+  
   if (!rateLimiter.tryConsume()) {
-    const wait = rateLimiter.waitSeconds();
-    return {
-      error: true,
-      message: `You're sending messages too quickly. Please wait ${wait} second${wait !== 1 ? 's' : ''} before trying again.`,
-      code: 429,
-    };
+    return fail(ERROR_CODES.RATE_LIMIT, "Too many requests.", rateLimiter.waitSeconds() * 1000);
   }
 
-  /* ── Build request ── */
   const contents = buildContents(userMessage, history);
-  const url = `${Config.GEMINI_ENDPOINT}/${Config.GEMINI_MODEL}:streamGenerateContent?alt=sse`;
+  const url = `${GEMINI.ENDPOINT}/${GEMINI.MODEL}${GEMINI.STREAM_SUFFIX}`;
 
-  let response;
   try {
-    response = await fetch(url, {
+    const response = await fetch(url, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -311,25 +368,16 @@ export async function askGeminiStream(userMessage, history = [], onChunk) {
       },
       body: JSON.stringify(buildRequestBody(contents)),
     });
-  } catch (networkError) {
-    return { error: true, message: `Network error: ${networkError.message}`, code: 0 };
-  }
 
-  if (!response.ok) {
-    const errorBody = await response.text().catch(() => '');
-    return {
-      error: true,
-      message: `Gemini streaming error ${response.status}: ${errorBody.slice(0, 200)}`,
-      code: response.status,
-    };
-  }
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      const msg = errorData?.error?.message || `Streaming failed: ${response.status}`;
+      return fail(ERROR_CODES.HTTP, msg);
+    }
 
-  /* ── Read SSE stream ── */
-  let fullText = '';
-
-  try {
     const reader = response.body.getReader();
     const decoder = new TextDecoder();
+    let fullText = '';
     let buffer = '';
 
     while (true) {
@@ -337,10 +385,8 @@ export async function askGeminiStream(userMessage, history = [], onChunk) {
       if (done) break;
 
       buffer += decoder.decode(value, { stream: true });
-
-      // Process complete SSE events in the buffer
       const lines = buffer.split('\n');
-      buffer = lines.pop(); // keep incomplete line in buffer
+      buffer = lines.pop(); // Hold incomplete line
 
       for (const line of lines) {
         if (!line.startsWith('data: ')) continue;
@@ -352,25 +398,102 @@ export async function askGeminiStream(userMessage, history = [], onChunk) {
           const delta = chunk?.candidates?.[0]?.content?.parts?.[0]?.text || '';
           if (delta) {
             fullText += delta;
-            if (typeof onChunk === 'function') onChunk(delta);
+            onChunk(delta);
           }
-        } catch {
-          // Malformed JSON chunk — skip
-        }
+        } catch {}
       }
     }
-  } catch (streamError) {
-    return { error: true, message: `Stream interrupted: ${streamError.message}`, code: 500 };
-  }
 
-  if (!fullText) {
-    return { error: true, message: 'Gemini returned an empty streamed response.', code: 204 };
+    if (!fullText) return fail(ERROR_CODES.HTTP, "Empty stream response.");
+    
+    serviceStatus.update('gemini', true);
+    return ok(parseSuggestions(fullText));
+  } catch (e) {
+    serviceStatus.update('gemini', false);
+    return fail(ERROR_CODES.NETWORK, "Stream interrupted.");
   }
-
-  /* ── Parse suggestions from the accumulated text ── */
-  const { suggestedQuestions } = parseSuggestions(fullText);
-  return { suggestedQuestions };
 }
 
-/* ── Exports ── */
-export { rateLimiter, parseSuggestions };
+/**
+ * @description Fetches the latest election news using Google Search grounding
+ * @returns {Promise<Result<Array<{title: string, summary: string, source: string}>>>}
+ */
+export async function fetchElectionNews() {
+  if (!Config.GEMINI_API_KEY) return ok([]);
+  
+  const prompt = `Using Google Search, find the 3 most recent Indian election news headlines from today. Format as:
+TITLE: {title}
+SUMMARY: {2 sentence summary}
+SOURCE: {publication name}
+--- (separator)`;
+
+  const url = `${GEMINI.ENDPOINT}/${GEMINI.MODEL}:generateContent`;
+  
+  const res = await fetchWithRetry(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'x-goog-api-key': Config.GEMINI_API_KEY },
+    body: JSON.stringify({
+      contents: [{ role: 'user', parts: [{ text: prompt }] }],
+      generationConfig: { temperature: 0.3, maxOutputTokens: 800 },
+      tools: [{ googleSearch: {} }],
+    }),
+  });
+
+  if (!res.ok) return res;
+
+  try {
+    const data = await res.value.json();
+    const raw = data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
+    const news = raw.split('---').map(block => ({
+      title: block.match(/TITLE:\s*(.+)/i)?.[1]?.trim() || 'Election News',
+      summary: block.match(/SUMMARY:\s*([\s\S]+?)(?=SOURCE:|$)/i)?.[1]?.trim() || '',
+      source: block.match(/SOURCE:\s*(.+)/i)?.[1]?.trim() || 'News'
+    })).filter(n => n.summary);
+    
+    return ok(news);
+  } catch {
+    return ok([]);
+  }
+}
+
+/**
+ * @description Analyzes a pasted election document and explains it simply
+ * @param {string} pastedText - Raw document text
+ * @returns {Promise<Result<{text: string}>>}
+ */
+export async function analyzeElectionDocument(pastedText) {
+  if (!Config.GEMINI_API_KEY) return fail(ERROR_CODES.AUTH, "Key missing.");
+  
+  const prompt = `The user pasted this official election document: ${pastedText}. Explain it in plain language for a first-time voter. List deadlines as bullet points.`;
+  const url = `${GEMINI.ENDPOINT}/${GEMINI.MODEL}:generateContent`;
+
+  const res = await fetchWithRetry(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'x-goog-api-key': Config.GEMINI_API_KEY },
+    body: JSON.stringify({
+      contents: [{ role: 'user', parts: [{ text: prompt }] }],
+      generationConfig: { temperature: 0.4, maxOutputTokens: 1200 },
+      tools: [{ googleSearch: {} }],
+    }),
+  });
+
+  if (!res.ok) return res;
+
+  try {
+    const data = await res.value.json();
+    const text = data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
+    return text ? ok({ text }) : fail(ERROR_CODES.HTTP, "Empty analysis.");
+  } catch {
+    return fail(ERROR_CODES.HTTP, "Parsing failed.");
+  }
+}
+
+/**
+ * @description Resets the rate limiter (primarily for unit tests)
+ * @returns {void}
+ */
+export function resetRateLimiter() {
+  rateLimiter.reset();
+}
+
+export { parseSuggestions };

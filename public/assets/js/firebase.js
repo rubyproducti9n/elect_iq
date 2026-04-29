@@ -1,259 +1,256 @@
 /* ═══════════════════════════════════════════════
-   ElectIQ — Firebase Integration (v2)
-   ─────────────────────────────────────────────
-   SERVICE 1: Firebase Analytics (custom events)
-   SERVICE 2: Firestore (session / message persistence)
-
-   Config is read from <meta> tags via Config module.
-   Firebase SDK is dynamically imported from CDN.
+   ElectIQ — Firebase & Firestore Module
+   Handles session persistence and message history
    ═══════════════════════════════════════════════ */
 
 import Config from './config.js';
+import { serviceStatus } from './serviceStatus.js';
+import { ok, fail, timed } from './utils.js';
+import { STORAGE_KEYS, ERROR_CODES } from './constants.js';
+import { initAnalytics } from './analytics.js';
 
 /* ── Firebase SDK Version ── */
 const FB_VER = '10.12.0';
-const CDN    = `https://www.gstatic.com/firebasejs/${FB_VER}`;
+const CDN = `https://www.gstatic.com/firebasejs/${FB_VER}`;
 
-/* ── Module-level singletons ── */
-let app       = null;
-let db        = null;
+/* ── Module State ── */
+let app = null;
+let db = null;
 let analytics = null;
 let initialized = false;
-let sessionId   = null;
-
-/* ═══════════════════════════════════════════════
-   INIT
-   ═══════════════════════════════════════════════ */
+let sessionId = null;
 
 /**
- * Initialize Firebase App, Firestore, and Analytics.
- * Safe to call multiple times — subsequent calls are no-ops.
+ * @description Initializes Firebase services dynamically from CDN
+ * @returns {Promise<Result<{app: object, db: object}>>} Result of initialization
+ * @throws {never} Errors are returned via Result pattern
  */
 export async function initFirebase() {
-  if (initialized) return { app, db, analytics };
+  if (initialized) return ok({ app, db });
 
   try {
-    const { initializeApp }  = await import(`${CDN}/firebase-app.js`);
-    const { getFirestore }   = await import(`${CDN}/firebase-firestore.js`);
-    const { getAnalytics, logEvent: _logEvent } = await import(`${CDN}/firebase-analytics.js`);
+    const [
+      { initializeApp },
+      { getFirestore },
+      { getAnalytics }
+    ] = await Promise.all([
+      import(`${CDN}/firebase-app.js`),
+      import(`${CDN}/firebase-firestore.js`),
+      import(`${CDN}/firebase-analytics.js`)
+    ]);
 
     const firebaseConfig = {
-      apiKey:            Config.FIREBASE_API_KEY,
-      authDomain:        Config.FIREBASE_AUTH_DOMAIN,
-      projectId:         Config.FIREBASE_PROJECT_ID,
-      storageBucket:     Config.FIREBASE_STORAGE_BUCKET,
+      apiKey: Config.FIREBASE_API_KEY,
+      authDomain: Config.FIREBASE_AUTH_DOMAIN,
+      projectId: Config.FIREBASE_PROJECT_ID,
+      storageBucket: Config.FIREBASE_STORAGE_BUCKET,
       messagingSenderId: Config.FIREBASE_MESSAGING_SENDER_ID,
-      appId:             Config.FIREBASE_APP_ID,
-      measurementId:     Config.FIREBASE_MEASUREMENT_ID,
+      appId: Config.FIREBASE_APP_ID,
+      measurementId: Config.FIREBASE_MEASUREMENT_ID,
     };
 
-    app       = initializeApp(firebaseConfig);
-    db        = getFirestore(app);
+    app = initializeApp(firebaseConfig);
+    db = getFirestore(app);
     analytics = getAnalytics(app);
+    
+    // Inject analytics into its own module for separation of concerns
+    await initAnalytics(analytics);
+    
     initialized = true;
-
-    console.info('[Firebase] Initialized successfully');
-    return { app, db, analytics };
-  } catch (error) {
-    console.error('[Firebase] Init failed:', error);
-    throw error;
+    serviceStatus.update('analytics', true);
+    console.info('[Firebase] Services initialized');
+    
+    return ok({ app, db });
+  } catch (err) {
+    serviceStatus.update('analytics', false);
+    return fail(ERROR_CODES.HTTP, "Firebase initialization failed.");
   }
 }
 
-/* ═══════════════════════════════════════════════
-   SERVICE 1: ANALYTICS
-   Custom events:
-   • chat_message_sent   { question_length, session_id }
-   • timeline_phase_viewed { phase_name }
-   • voice_input_used    {}
-   • suggested_question_clicked { question_text }
-   • glossary_term_viewed { term }
-   ═══════════════════════════════════════════════ */
+/* ─────────────────────────────────────────────
+   SESSION MANAGEMENT
+   ───────────────────────────────────────────── */
 
 /**
- * Log a custom analytics event.
- * Silently no-ops if analytics is not available.
- * @param {string} eventName
- * @param {Object} params
- */
-export async function logAnalyticsEvent(eventName, params = {}) {
-  try {
-    if (!analytics) {
-      await initFirebase();
-    }
-    if (!analytics) return; // still null → bail silently
-
-    const { logEvent } = await import(`${CDN}/firebase-analytics.js`);
-
-    // Always attach session_id when available
-    const enrichedParams = { ...params };
-    if (sessionId) enrichedParams.session_id = sessionId;
-
-    logEvent(analytics, eventName, enrichedParams);
-  } catch {
-    // Analytics failure should never break the app
-  }
-}
-
-/* ═══════════════════════════════════════════════
-   SERVICE 2: FIRESTORE — SESSION / MESSAGE PERSISTENCE
-   Schema:
-     sessions/{session_id}
-       ├─ createdAt: Timestamp
-       ├─ updatedAt: Timestamp
-       └─ messages (subcollection)
-            ├─ {auto-id}
-            │   ├─ role: "user" | "assistant"
-            │   ├─ text: string
-            │   ├─ timestamp: Timestamp
-            │   └─ helpful_rating: null | 1 | -1
-   ═══════════════════════════════════════════════ */
-
-const SESSION_KEY = 'electiq_session_id';
-
-/**
- * Generate a random session ID (UUID-v4-like).
+ * @description Generates a cryptographically secure session ID
+ * @returns {string} The new session ID
  */
 function generateSessionId() {
-  return 'sess_' + crypto.randomUUID();
+  return `sess_${crypto.randomUUID()}`;
 }
 
 /**
- * Initialize or resume a session.
- * Creates a Firestore document if it doesn't exist yet.
- * Persists the session_id in localStorage for continuity.
- * @returns {Promise<string>} The active session ID
+ * @description Initializes or resumes a voter session, persisting to Firestore
+ * @returns {Promise<Result<string>>} The active session ID
+ * @fires Analytics#funnel_app_opened
  */
 export async function initSession() {
-  // 1. Check localStorage for an existing session
-  let storedId = null;
-  try {
-    storedId = localStorage.getItem(SESSION_KEY);
-  } catch { /* localStorage unavailable */ }
+  return await timed("firebase_init_session", async () => {
+    // Check for existing session in persistent storage
+    let storedId = null;
+    try {
+      storedId = localStorage.getItem(STORAGE_KEYS.SESSION_ID);
+    } catch {}
 
-  sessionId = storedId || generateSessionId();
+    sessionId = storedId || generateSessionId();
 
-  // Persist back
-  try {
-    localStorage.setItem(SESSION_KEY, sessionId);
-  } catch { /* ignore */ }
+    try {
+      localStorage.setItem(STORAGE_KEYS.SESSION_ID, sessionId);
+    } catch {}
 
-  // 2. Ensure Firestore session doc exists
-  try {
-    if (!db) await initFirebase();
-    if (!db) return sessionId; // no Firestore → return ID only
+    // Ensure session document exists in Firestore
+    const initRes = await initFirebase();
+    if (!initRes.ok) return ok(sessionId); // Return ID anyway for offline mode
 
-    const { doc, getDoc, setDoc, serverTimestamp } = await import(`${CDN}/firebase-firestore.js`);
-    const sessionRef = doc(db, 'sessions', sessionId);
-    const snap = await getDoc(sessionRef);
+    try {
+      const { doc, getDoc, setDoc, serverTimestamp } = await import(`${CDN}/firebase-firestore.js`);
+      const sessionRef = doc(db, 'sessions', sessionId);
+      const snap = await getDoc(sessionRef);
 
-    if (!snap.exists()) {
-      await setDoc(sessionRef, {
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp(),
-      });
-      console.info(`[Firebase] New session created: ${sessionId}`);
-    } else {
-      console.info(`[Firebase] Session resumed: ${sessionId}`);
+      if (!snap.exists()) {
+        await setDoc(sessionRef, {
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+        });
+        console.info(`[Firebase] New session record created: ${sessionId}`);
+      }
+      return ok(sessionId);
+    } catch (err) {
+      return ok(sessionId); // Fail gracefully for session creation
     }
-  } catch (err) {
-    console.warn('[Firebase] Session init failed (offline?):', err.message);
-  }
-
-  return sessionId;
+  });
 }
 
+/* ─────────────────────────────────────────────
+   MESSAGE PERSISTENCE
+   ───────────────────────────────────────────── */
+
 /**
- * Save a single message to the session's messages subcollection.
- * @param {"user"|"assistant"} role
- * @param {string} text
- * @returns {Promise<string|null>} The Firestore document ID, or null on failure
+ * @description Saves a chat message to the session's history subcollection
+ * @param {string} role - "user" or "assistant"
+ * @param {string} content - The message text
+ * @returns {Promise<Result<string>>} The document ID of the saved message
  */
-export async function saveMessage(role, text) {
-  if (!sessionId) await initSession();
-  if (!db) {
-    try { await initFirebase(); } catch { return null; }
-  }
-  if (!db) return null;
+export async function saveMessage(role, content) {
+  if (!db) await initFirebase();
+  if (!db) return fail(ERROR_CODES.HTTP, "Database not available.");
 
   try {
-    const { collection, addDoc, serverTimestamp } = await import(`${CDN}/firebase-firestore.js`);
+    const { collection, addDoc, doc, updateDoc, serverTimestamp } = await import(`${CDN}/firebase-firestore.js`);
     const messagesRef = collection(db, 'sessions', sessionId, 'messages');
 
     const docRef = await addDoc(messagesRef, {
       role,
-      text: text.slice(0, 10_000), // cap at 10 KB
+      text: content.slice(0, 10000), // Safety cap
       timestamp: serverTimestamp(),
       helpful_rating: null,
     });
 
-    // Update session's updatedAt
-    const { doc, updateDoc } = await import(`${CDN}/firebase-firestore.js`);
+    // Update session timestamp for LRU-like tracking
     await updateDoc(doc(db, 'sessions', sessionId), {
       updatedAt: serverTimestamp(),
     }).catch(() => {});
 
-    return docRef.id;
+    return ok(docRef.id);
   } catch (err) {
-    console.warn('[Firebase] saveMessage failed:', err.message);
-    return null;
+    return fail(ERROR_CODES.HTTP, "Failed to save message history.");
   }
 }
 
 /**
- * Load the last N messages for a given session.
- * @param {string} sid - Session ID (defaults to current)
- * @param {number} limit - Max messages to return (default 20)
- * @returns {Promise<Array<{id, role, text, timestamp, helpful_rating}>>}
+ * @description Loads previous chat messages for the current session
+ * @param {number} [limit] - Maximum messages to retrieve (default: 20)
+ * @returns {Promise<Result<Array>>} Array of message objects
  */
-export async function loadHistory(sid, limit = 20) {
-  const targetId = sid || sessionId;
-  if (!targetId) return [];
-  if (!db) {
-    try { await initFirebase(); } catch { return []; }
-  }
-  if (!db) return [];
+export async function loadHistory(limit = 20) {
+  return await timed("firestore_load_history", async () => {
+    if (!db) await initFirebase();
+    if (!db) return ok([]);
 
-  try {
-    const { collection, query, orderBy, limitToLast, getDocs } =
-      await import(`${CDN}/firebase-firestore.js`);
+    try {
+      const { collection, query, orderBy, limitToLast, getDocs } = await import(`${CDN}/firebase-firestore.js`);
+      const messagesRef = collection(db, 'sessions', sessionId, 'messages');
+      const q = query(messagesRef, orderBy('timestamp', 'asc'), limitToLast(limit));
+      const snap = await getDocs(q);
 
-    const messagesRef = collection(db, 'sessions', targetId, 'messages');
-    const q = query(messagesRef, orderBy('timestamp', 'asc'), limitToLast(limit));
-    const snap = await getDocs(q);
-
-    return snap.docs.map((d) => ({
-      id: d.id,
-      ...d.data(),
-    }));
-  } catch (err) {
-    console.warn('[Firebase] loadHistory failed:', err.message);
-    return [];
-  }
+      const history = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      return ok(history);
+    } catch (err) {
+      return ok([]); // Return empty history rather than blocking UI
+    }
+  });
 }
 
 /**
- * Rate a specific message as helpful (+1) or unhelpful (-1).
- * @param {string} messageId - Firestore doc ID in the messages subcollection
- * @param {1|-1} rating
+ * @description Submits a voter feedback rating for a specific AI response
+ * @param {string} messageId - Firestore ID of the assistant message
+ * @param {number} rating - 1 for helpful, -1 for unhelpful
+ * @returns {Promise<Result<void>>}
  */
 export async function rateMessage(messageId, rating) {
-  if (!sessionId || !messageId) return;
-  if (!db) {
-    try { await initFirebase(); } catch { return; }
-  }
-  if (!db) return;
+  if (!db) await initFirebase();
+  if (!db) return fail(ERROR_CODES.HTTP, "Database not available.");
 
   try {
     const { doc, updateDoc } = await import(`${CDN}/firebase-firestore.js`);
     const msgRef = doc(db, 'sessions', sessionId, 'messages', messageId);
     await updateDoc(msgRef, { helpful_rating: rating });
+    return ok();
   } catch (err) {
-    console.warn('[Firebase] rateMessage failed:', err.message);
+    return fail(ERROR_CODES.HTTP, "Failed to update rating.");
   }
 }
 
-/* ── Convenience: get current session ID ── */
-export function getSessionId() {
-  return sessionId;
+/* ─────────────────────────────────────────────
+   PREFERENCES & SETTINGS
+   ───────────────────────────────────────────── */
+
+/**
+ * @description Persists user settings across devices using the session document
+ * @param {object} prefs - Key-value pair of settings
+ * @returns {Promise<Result<void>>}
+ */
+export async function savePreferences(prefs) {
+  if (!db) await initFirebase();
+  if (!db) return fail(ERROR_CODES.HTTP, "Database not available.");
+
+  try {
+    const { doc, setDoc } = await import(`${CDN}/firebase-firestore.js`);
+    await setDoc(doc(db, 'sessions', sessionId, 'preferences', 'user'), {
+      ...prefs,
+      updatedAt: new Date().toISOString(),
+    }, { merge: true });
+    serviceStatus.update('firestore', true);
+    return ok();
+  } catch (err) {
+    serviceStatus.update('firestore', false);
+    return fail(ERROR_CODES.HTTP, "Preferences sync failed.");
+  }
+}
+
+/**
+ * @description Retrieves persisted user settings
+ * @returns {Promise<Result<object|null>>} The preference object or null
+ */
+export async function loadPreferences() {
+  if (!db) await initFirebase();
+  if (!db) return ok(null);
+
+  try {
+    const { doc, getDoc } = await import(`${CDN}/firebase-firestore.js`);
+    const snap = await getDoc(doc(db, 'sessions', sessionId, 'preferences', 'user'));
+    serviceStatus.update('firestore', true);
+    return ok(snap.exists() ? snap.data() : null);
+  } catch (err) {
+    serviceStatus.update('firestore', false);
+    return ok(null);
+  }
+}
+
+/**
+ * @description Returns the current active session ID
+ * @returns {string|null}
+ */
+export function getSessionId() { 
+  return sessionId; 
 }

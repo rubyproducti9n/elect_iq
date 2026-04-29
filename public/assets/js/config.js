@@ -1,54 +1,54 @@
 /* ═══════════════════════════════════════════════
-   ElectIQ — Security-Focused Configuration
-   Reads API keys from injected window variables.
+   ElectIQ — Configuration Module
+   Centralized management of environment variables
    ═══════════════════════════════════════════════ */
 
 /**
- * Validates that all required config values are present.
+ * @description Validates the runtime configuration for missing secrets
+ * @param {object} config - The populated config object
+ * @param {string[]} required - List of keys that MUST be present
+ * @returns {void}
  */
-function validateConfig(config, requiredKeys) {
-  const missing = requiredKeys.filter((key) => !config[key] || (typeof config[key] === 'string' && config[key].startsWith('%VITE_')));
+function validateConfig(config, required) {
+  const missing = required.filter(k => !config[k] || config[k].startsWith('%VITE_'));
   if (missing.length > 0) {
-    console.warn(`[ElectIQ Config] Missing or unreplaced configuration for: ${missing.join(', ')}.`);
+    console.warn(`[Config] Missing critical keys: ${missing.join(', ')}`);
   }
 }
 
 /**
- * Helper to fetch config from meta tags or window variables.
+ * @description Internal helper to resolve config values from multiple providers
+ * @param {string} metaName - Name in meta tag
+ * @param {string} windowVal - Variable name in window object
+ * @returns {string} The resolved value or empty string
  */
-const getVal = (metaName, windowVal) => {
+const resolve = (metaName, windowVal) => {
   const meta = document.querySelector(`meta[name="${metaName}"]`)?.getAttribute('content');
   if (meta && !meta.startsWith('%VITE_')) return meta;
   if (windowVal && !String(windowVal).startsWith('%VITE_')) return windowVal;
   return '';
 };
 
-const firebaseConfig = window.__FIREBASE_CONFIG__ || {};
+const fb = window.__FIREBASE_CONFIG__ || {};
 
+/**
+ * @description Frozen configuration object containing all cloud API credentials
+ */
 const Config = Object.freeze({
-  /* ── Gemini API ── */
-  GEMINI_API_KEY: getVal('gemini-api-key', window.__GEMINI_KEY__),
-  GEMINI_MODEL: 'gemini-2.5-flash-lite',
+  GEMINI_API_KEY: resolve('gemini-api-key', window.__GEMINI_KEY__),
+  GEMINI_MODEL: 'gemini-3.1-flash-lite-preview',
   GEMINI_ENDPOINT: 'https://generativelanguage.googleapis.com/v1beta/models',
   
-  /* ── Firebase ── */
-  FIREBASE_API_KEY: getVal('firebase-api-key', firebaseConfig.apiKey),
-  FIREBASE_AUTH_DOMAIN: getVal('firebase-auth-domain', firebaseConfig.authDomain),
-  FIREBASE_PROJECT_ID: getVal('firebase-project-id', firebaseConfig.projectId),
-  FIREBASE_STORAGE_BUCKET: getVal('firebase-storage-bucket', firebaseConfig.storageBucket),
-  FIREBASE_MESSAGING_SENDER_ID: getVal('firebase-messaging-sender-id', firebaseConfig.messagingSenderId),
-  FIREBASE_APP_ID: getVal('firebase-app-id', firebaseConfig.appId),
-  FIREBASE_MEASUREMENT_ID: getVal('firebase-measurement-id', firebaseConfig.measurementId),
+  FIREBASE_API_KEY: resolve('firebase-api-key', fb.apiKey),
+  FIREBASE_PROJECT_ID: resolve('firebase-project-id', fb.projectId),
+  FIREBASE_APP_ID: resolve('firebase-app-id', fb.appId),
+  FIREBASE_MEASUREMENT_ID: resolve('firebase-measurement-id', fb.measurementId),
 
-  /* ── Google TTS ── */
-  GOOGLE_TTS_API_KEY: getVal('google-tts-api-key', window.__TTS_KEY__),
-  GOOGLE_TTS_ENDPOINT: 'https://texttospeech.googleapis.com/v1/text:synthesize'
+  GOOGLE_TTS_API_KEY: resolve('google-tts-api-key', window.__TTS_KEY__),
+  GOOGLE_TTS_ENDPOINT: 'https://texttospeech.googleapis.com/v1/text:synthesize',
+  GOOGLE_NLP_API_KEY: resolve('google-tts-api-key', window.__TTS_KEY__),
 });
 
-validateConfig(Config, [
-  'GEMINI_API_KEY',
-  'FIREBASE_API_KEY',
-  'FIREBASE_PROJECT_ID'
-]);
+validateConfig(Config, ['GEMINI_API_KEY', 'FIREBASE_API_KEY', 'FIREBASE_PROJECT_ID']);
 
 export default Config;

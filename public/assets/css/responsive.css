@@ -38,7 +38,7 @@
     right: 0;
     height: var(--header-height);
     background: var(--color-surface);
-    border-bottom: 1px solid rgba(0,0,0,0.1);
+    border-bottom: 1px solid var(--border-subtle);
     align-items: center;
     justify-content: space-between;
     padding: 0 var(--space-4);
@@ -68,7 +68,7 @@
     right: 0;
     height: var(--tab-bar-height);
     background: var(--color-surface);
-    border-top: 1px solid rgba(0,0,0,0.1);
+    border-top: 1px solid var(--border-subtle);
     z-index: 200;
     justify-content: space-around;
     align-items: center;
@@ -103,7 +103,7 @@
     right: 0;
     background: var(--color-surface);
     z-index: 150;
-    border-top: 1px solid rgba(0,0,0,0.1);
+    border-top: 1px solid var(--border-subtle);
     padding: var(--space-2);
   }
 

@@ -3,32 +3,65 @@
    ═══════════════════════════════════════════════ */
 
 :root {
-  /* ── Colors ── */
-  --color-primary: #1a56db; /* election blue */
-  --color-secondary: #f59e0b; /* voting gold */
+  color-scheme: light dark;
+
+  /* ── Modern HSL Color Palette ── */
+  --primary-h: 224;
+  --primary-s: 76%;
+  --primary-l: 48%;
+  
+  --color-primary: hsl(var(--primary-h), var(--primary-s), var(--primary-l));
+  --color-primary-dark: hsl(var(--primary-h), var(--primary-s), 40%);
+  --color-primary-light: hsl(var(--primary-h), var(--primary-s), 60%);
+  --color-primary-soft: hsl(var(--primary-h), var(--primary-s), 95%);
+  
+  --color-secondary: #f59e0b;
+  --color-secondary-soft: #fef3c7;
+  
   --color-surface: #ffffff;
-  --color-background: #f0f4ff;
-  --color-text: #111827;
-  --color-text-muted: #6b7280;
+  --color-background: #f8faff;
+  --color-text: #0f172a;
+  --color-text-muted: #64748b;
   --color-success: #10b981;
   --color-error: #ef4444;
-  --color-bot-bubble: #e8efff;
-  --color-user-bubble: #1a56db;
+  
+  --color-bot-bubble: #f1f5f9;
+  --color-user-bubble: var(--color-primary);
+
+  /* ── Glassmorphism & Effects ── */
+  --glass-bg: rgba(255, 255, 255, 0.7);
+  --glass-border: rgba(0, 0, 0, 0.08);
+  --glass-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.07);
+  --blur: 12px;
+
+  /* ── Subtle background tint (for filter bars, etc.) ── */
+  --tint-subtle: rgba(0, 0, 0, 0.03);
+  --tint-hover: rgba(0, 0, 0, 0.06);
+  --border-subtle: rgba(0, 0, 0, 0.08);
 
   /* Aliases to support existing css */
   --clr-bg-primary: var(--color-background);
   --clr-bg-secondary: var(--color-surface);
-  --clr-bg-tertiary: #e5edff;
+  --clr-bg-tertiary: #f1f5f9;
   --clr-surface: var(--color-surface);
-  --clr-surface-hover: #f3f4f6;
-  --clr-surface-glass: rgba(255, 255, 255, 0.7);
+  --clr-surface-hover: #f1f5f9;
+  --clr-surface-glass: var(--glass-bg);
   --clr-text-primary: var(--color-text);
   --clr-text-secondary: var(--color-text-muted);
   --clr-text-muted: var(--color-text-muted);
   --clr-text-inverse: #ffffff;
+  --clr-primary-200: hsl(var(--primary-h), var(--primary-s), 80%);
+  --clr-primary-300: hsl(var(--primary-h), var(--primary-s), 70%);
+  --clr-primary-400: hsl(var(--primary-h), var(--primary-s), 60%);
   --clr-primary-500: var(--color-primary);
+  --clr-primary-600: hsl(var(--primary-h), var(--primary-s), 40%);
+  --clr-gold-400: #f59e0b;
+  --clr-gold-500: #d97706;
   --clr-error: var(--color-error);
   --clr-success: var(--color-success);
+  --grad-btn: var(--grad-primary);
+  --grad-card: linear-gradient(180deg, var(--color-surface) 0%, var(--color-background) 100%);
+  --accent: var(--color-primary);
 
   /* ── Breakpoints ── */
   --bp-mobile: 375px;
@@ -36,7 +69,7 @@
   --bp-desktop: 1200px;
 
   /* ── Typography ── */
-  --ff-primary: 'Inter', -apple-system, sans-serif;
+  --ff-primary: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
   --ff-display: 'Inter', sans-serif;
   --fs-xs: 0.75rem;
   --fs-sm: 0.875rem;
@@ -44,10 +77,13 @@
   --fs-md: 1.125rem;
   --fs-lg: 1.25rem;
   --fs-xl: 1.5rem;
-  --fs-2xl: 2rem;
+  --fs-2xl: 2.25rem;
+  --fs-3xl: 3rem;
+  
   --lh-tight: 1.2;
   --lh-normal: 1.5;
-  --lh-relaxed: 1.6;
+  --lh-relaxed: 1.625;
+  
   --fw-light: 300;
   --fw-regular: 400;
   --fw-medium: 500;
@@ -55,10 +91,10 @@
   --fw-bold: 700;
 
   /* ── Layout ── */
-  --sidebar-width: 260px;
-  --header-height: 60px;
-  --tab-bar-height: 60px;
-  --chat-max: 760px;
+  --sidebar-width: 280px;
+  --header-height: 64px;
+  --tab-bar-height: 64px;
+  --chat-max: 800px;
 
   /* ── Spacing ── */
   --space-1: 0.25rem;
@@ -69,35 +105,72 @@
   --space-6: 1.5rem;
   --space-8: 2rem;
   --space-10: 3rem;
+  --space-12: 4rem;
   
   /* ── Gradients ── */
-  --grad-hero: linear-gradient(135deg, var(--color-primary), #4f46e5);
+  --grad-hero: linear-gradient(135deg, #1e3a8a 0%, #1e40af 50%, #3b82f6 100%);
+  --grad-primary: linear-gradient(135deg, var(--color-primary) 0%, #4f46e5 100%);
+  --grad-surface: linear-gradient(180deg, rgba(255,255,255,0.05) 0%, rgba(255,255,255,0) 100%);
   
   /* ── Radii ── */
-  --radius-sm: 0.25rem;
-  --radius-md: 0.5rem;
-  --radius-lg: 0.75rem;
-  --radius-xl: 1rem;
+  --radius-sm: 0.375rem;
+  --radius-md: 0.625rem;
+  --radius-lg: 0.875rem;
+  --radius-xl: 1.25rem;
+  --radius-2xl: 1.5rem;
   --radius-full: 9999px;
 
   /* ── Shadows ── */
-  --shadow-sm: 0 1px 2px rgba(0,0,0,0.05);
-  --shadow-md: 0 4px 6px -1px rgba(0,0,0,0.1);
-  --shadow-lg: 0 10px 15px -3px rgba(0,0,0,0.1);
+  --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+  --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+  --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+  --shadow-xl: 0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1);
+  --shadow-2xl: 0 25px 50px -12px rgb(0 0 0 / 0.25);
+  --shadow-inner: inset 0 2px 4px 0 rgb(0 0 0 / 0.05);
 
   /* ── Transitions ── */
   --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-in: cubic-bezier(0.4, 0, 1, 1);
+  --ease-spring: cubic-bezier(0.175, 0.885, 0.32, 1.275);
   --duration-fast: 150ms;
   --duration-normal: 250ms;
-  --duration-slow: 300ms;
+  --duration-slow: 400ms;
 }
 
+/* ── Dark Theme ── */
 [data-theme="dark"] {
+  color-scheme: dark;
+
   --color-surface: #1e1e24;
-  --color-background: #121214;
-  --color-text: #f9fafb;
-  --color-text-muted: #9ca3af;
-  --color-bot-bubble: #2d3748;
-  --color-user-bubble: #1a56db;
-  --clr-surface-glass: rgba(30, 30, 36, 0.8);
+  --color-background: #0f1115;
+  --color-text: #f8fafc;
+  --color-text-muted: #94a3b8;
+  --color-bot-bubble: #1e293b;
+  --color-user-bubble: var(--color-primary);
+
+  --color-primary-soft: hsl(var(--primary-h), 40%, 18%);
+  --color-primary-light: hsl(var(--primary-h), var(--primary-s), 65%);
+  --color-primary-dark: hsl(var(--primary-h), var(--primary-s), 35%);
+  --color-secondary-soft: rgba(245, 158, 11, 0.12);
+  
+  --glass-bg: rgba(30, 30, 36, 0.75);
+  --glass-border: rgba(255, 255, 255, 0.08);
+  --glass-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.4);
+
+  --tint-subtle: rgba(255, 255, 255, 0.04);
+  --tint-hover: rgba(255, 255, 255, 0.08);
+  --border-subtle: rgba(255, 255, 255, 0.08);
+
+  --clr-bg-tertiary: #1a1a20;
+  --clr-surface-hover: #27272e;
+
+  --grad-card: linear-gradient(180deg, var(--color-surface) 0%, var(--color-background) 100%);
+
+  --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.2);
+  --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.3), 0 2px 4px -2px rgb(0 0 0 / 0.3);
+  --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.3), 0 4px 6px -4px rgb(0 0 0 / 0.3);
+  --shadow-xl: 0 20px 25px -5px rgb(0 0 0 / 0.3), 0 8px 10px -6px rgb(0 0 0 / 0.3);
+  --shadow-2xl: 0 25px 50px -12px rgb(0 0 0 / 0.5);
+  --shadow-inner: inset 0 2px 4px 0 rgb(0 0 0 / 0.15);
 }
+
